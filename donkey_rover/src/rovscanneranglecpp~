@@ -1,0 +1,60 @@
+#include "ros/ros.h"
+#include "std_msgs/String.h"
+#include "std_msgs/Float64.h"
+#include "libRover.h"
+#include <cfloat>
+#include <sstream>
+
+
+/**
+ * This tutorial demonstrates simple sending of messages over the ROS system.
+ */
+int main(int argc, char **argv)
+{
+
+  ros::init(argc, argv, "rovstate");
+
+  ros::NodeHandle n;
+
+
+  ros::Publisher drivetl_pub = n.advertise<std_msgs::Float64>("rovstate", 1000);
+
+  ros::Rate loop_rate(10);
+  
+  /* ROVER INITIALIZATION */
+
+  Rover rover(false);
+  int retCode = rover.init();
+  if (retCode != 0)
+		{
+     	// Failed to init the rover
+		return -1;
+  }
+
+ 
+  
+  float angle=0;
+  while (ros::ok())
+  {
+    /*GETING THE ANGLE*/
+    
+    int retCode = rover.getScannerAngle (angle);
+    if (retCode != 0)
+		{
+     	// Failed to read the scanner vangle
+		return -1;
+    }
+    std_msgs::Float64 msg;
+    msg.data=angle;
+    /*msg.data=obj.getScannerHomePosition( _pos);*/
+
+    drivetl_pub.publish(msg);
+
+    ros::spinOnce();
+
+    loop_rate.sleep();
+  }
+
+
+  return 0;
+}

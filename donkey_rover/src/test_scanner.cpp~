@@ -1,0 +1,164 @@
+/***************************************************************************
+ *   Copyright (C) 2015 BlueBotics SA                                      *
+ ***************************************************************************/
+
+#include "libRover.h"
+
+#include <cfloat>
+
+int main()
+{
+    Rover rover(false);
+
+    /*
+     * Init the rover.
+     */
+
+    cout << "Initializing the rover ..." << endl << endl;
+
+    int retCode = rover.init();
+    if (retCode != 0)
+    {
+        cout << "Failed to init the rover" << endl;
+        return -1;
+    }
+
+   
+    /*
+     * Test the scanner.
+     */
+
+    cout << "Testing the scanner ..." << endl << endl;
+
+    for (int i = 0; i < 2; ++i)
+    {
+        if (i > 0)
+        {
+            // Adjust the scanner home position.
+            float adj, pos;
+            retCode = rover.getScannerHomePosition(pos);
+            if (retCode != 0)
+            {
+                printError("getScannerHomePosition failed", retCode);
+                return -1;
+            }
+            retCode = rover.getScannerAdjustment(adj);
+            if (retCode != 0)
+            {
+                printError("getScannerAdjustment failed", retCode);
+                return -1;
+            }
+            cout << "Home (position, adjustment)=(" << pos << ", " << adj;
+            adj = M_2PI*10.0/360.0; // Add 10°
+            retCode = rover.setScannerAdjustment(adj);
+            if (retCode != 0)
+            {
+                printError("setScannerAdjustment failed", retCode);
+                return -1;
+            }
+            retCode = rover.getScannerHomePosition(pos);
+            if (retCode != 0)
+            {
+                printError("getScannerHomePosition failed", retCode);
+                return -1;
+            }
+            retCode = rover.getScannerAdjustment(adj);
+            if (retCode != 0)
+            {
+                printError("getScannerAdjustment failed", retCode);
+                return -1;
+            }
+            cout << ") -> (" << pos << ", " << adj << ')' << endl;
+
+            // Change the roll angle.
+            retCode = rover.setScannerAngle(M_PI/4.0);
+            if (retCode != 0)
+            {
+                printError("setScannerAngle failed", retCode);
+                return -1;
+            }
+        }
+
+        // Change the roll period.
+        retCode = rover.setScannerPeriod(2.5);
+        if (retCode != 0)
+        {
+            printError("setScannerPeriod failed", retCode);
+            return -1;
+        }
+
+        retCode = rover.sendScannerCommand(ESCDoHoming);
+        if (retCode != 0)
+        {
+            printError("DoHoming failed", retCode);
+            return -1;
+        }
+        cout << "* State =";
+        do
+        {
+            rover.getScannerState(state);
+            cout << ' ' << state;
+            Time::sleep(1, 0);
+        }
+        while (state != ESSIdle);
+        cout << endl;
+
+        retCode = rover.sendScannerCommand(ESCGoHome);
+        if (retCode != 0)
+        {
+            printError("GoHome failed", retCode);
+            return -1;
+        }
+        cout << "* State =";
+        do
+        {
+            rover.getScannerState(state);
+            cout << ' ' << state;
+            Time::sleep(1, 0);
+        }
+        while (state != ESSIdle);
+        cout << endl;
+
+        retCode = rover.sendScannerCommand(ESCStart);
+        if (retCode != 0)
+        {
+            printError("Start failed", retCode);
+            return -1;
+        }
+        cout << "* State =";
+        for (int j = 0; j < 20; ++j)
+        {
+            rover.getScannerState(state);
+            cout << ' ' << state;
+            Time::sleep(1, 0);
+        }
+
+        if (i == 0)
+        {
+            retCode = rover.sendScannerCommand(ESCStop);
+        }
+        else
+        {
+            retCode = rover.sendScannerCommand(ESCGoHome);
+        }
+        if (retCode != 0)
+        {
+            printError("Stop/GoHome failed", retCode);
+            return -1;
+        }
+        do
+        {
+            rover.getScannerState(state);
+            cout << ' ' << state;
+            Time::sleep(1, 0);
+        }
+        while (state != ESSIdle);
+        cout << endl;
+    }
+
+    cout << endl;
+
+    
+    return 0;
+}
+

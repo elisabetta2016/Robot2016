@@ -1,0 +1,5 @@
+<launch>
+  <node type="mtnode.py" pkg="xsens_driver" name="mtnode">
+    <param name="frame_id" value="base_link" />
+  </node>
+</launch>

@@ -1,0 +1,13 @@
+<launch>
+  <node type="mtnode.py" pkg="xsens_driver" name="mtnode">
+    <remap from="mti/sensor/imu" to="imu/data_raw"/>
+    <remap from="mti/sensor/magnetic" to="imu/mag"/>
+    <param name="frame_id" value="base_link" />
+  </node>
+
+  <node type="imu_filter_node" pkg="imu_filter_madgwick" name="imu_filter_node">
+    <param name="use_mag" value="true" />
+    <param name="use_magnetic_field_msg" value="true" />
+  </node>
+
+</launch>

@@ -1,0 +1,12 @@
+<launch>
+
+  <node pkg="follow_person" name="test1" type="test1.py" output="screen">
+     <param name="~Tracking_precision" value="0.02" />
+     <param name="~distance_b" value="0.4" />
+     <param name="~Controller_Gain" value="4" />
+  </node>
+
+  <node pkg="openni_tracker" name="tracker" type="openni_tracker" output="screen">
+  </node>
+  
+</launch>

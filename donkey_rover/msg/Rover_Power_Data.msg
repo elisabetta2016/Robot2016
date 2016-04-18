@@ -1,0 +1,11 @@
+Header header
+
+float64 TimeStamp
+
+float64 Battery_Voltage
+
+float64 Front_Right_Track_Current
+float64 Front_Left_Track_Current
+float64 Rear_Right_Track_Current
+float64 Rear_Left_Track_Current
+

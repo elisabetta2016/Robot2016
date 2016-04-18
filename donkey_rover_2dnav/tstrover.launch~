@@ -1,0 +1,15 @@
+<launch>
+  <group ns="/wasp0">
+    <include file="$(find lrs_sherpa)/launch/tstwasp.launch" >
+
+    </include>
+
+    <node name="dwdb" pkg="lrs_wdb" type="dwdb">
+      <rosparam>
+        capabilities: ["scan-ground-single", "fly-waypoints", "yaw", "fly-to", "wait", "take-off", "land", "take-pictures"]
+      </rosparam>
+    </node>
+
+  </group>
+
+</launch>

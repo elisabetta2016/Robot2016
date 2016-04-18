@@ -1,0 +1,77 @@
+#include "ros/ros.h"
+#include "std_msgs/String.h"
+#include "std_msgs/Float64.h"
+#include "libRover.h"
+#include <cfloat>
+#include <sstream>
+
+
+/**
+ * This tutorial demonstrates simple sending of messages over the ROS system.
+ */
+int main()
+{
+
+ 
+  /* ROVER INITIALIZATION */
+
+  Rover rover(false);
+  int retCode = rover.init();
+  if (retCode != 0)
+		{
+     	// Failed to init the rover
+		return -1;
+  }
+
+ EScannerState state;
+  for (int i = 0; i < 2; ++i)
+    {
+
+do
+        {
+            rover.getScannerState(state);
+            cout << ' ' << state;
+            Time::sleep(1, 0);
+        }
+        while (state != ESSIdle);
+        cout << endl;
+
+        retCode = rover.sendScannerCommand(ESCStart);
+        if (retCode != 0)
+        {
+            printError("Start failed", retCode);
+            return -1;
+        }
+        cout << "* State =";
+        for (int j = 0; j < 20; ++j)
+        {
+            rover.getScannerState(state);
+            cout << ' ' << state;
+            Time::sleep(1, 0);
+        }
+
+        if (i == 0)
+        {
+            retCode = rover.sendScannerCommand(ESCStop);
+        }
+        else
+        {
+            retCode = rover.sendScannerCommand(ESCGoHome);
+        }
+        if (retCode != 0)
+        {
+            printError("Stop/GoHome failed", retCode);
+            return -1;
+        }
+        do
+        {
+            rover.getScannerState(state);
+            cout << ' ' << state;
+            Time::sleep(1, 0);
+        }
+        while (state != ESSIdle);
+        cout << endl;
+}
+
+  return 0;
+}

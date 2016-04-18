@@ -1,0 +1,11 @@
+<launch>
+  <node type="laser_scan_assembler" pkg="laser_assembler" name="my_assembler">
+    <!--remap from="scan" to="tilt_scan"/-->
+    <param name="max_scans" type="int" value="200" />
+    <param name="fixed_frame" type="string" value="base_link" />
+  </node>
+  <node type="periodic_snapshotter" pkg="laser_assembler" name="periodic_snapshotter">
+  <remap from="my_cloud" to="cloud_in" />
+  </node>
+
+</launch>

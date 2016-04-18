@@ -1,0 +1,32 @@
+<launch>
+
+	<node pkg="position_estimator" type="position_estimator" name="position_estimator" output="screen">
+		<param name="Filter_Gain_Kx" value="1"/>
+		<param name="Filter_Gain_Ky" value="1"/>	
+		<param name="Filter_Gain_Kz" value="1"/>			
+	</node> 
+
+	<node pkg="mms_rover" type="mms_rover" name="mms_rover" output="screen">
+	<param name="WP_tracking_precision" value="2"/> <!-- eps_WP -->
+	</node>
+	
+	<node pkg="reference_rover" type="reference_rover" name="reference_rover" output="screen"> 
+	</node> 
+
+	<node pkg="body_frame_error" type="body_frame_error" name="body_frame_error" output="screen">
+		<param name="safety_distance" value="0.0"/>  <!-- b -->
+	</node> 
+
+	<node pkg="donkey_rover" type="follow.py" name="follow" output="screen">
+		<param name="Tracking_precision" value="1"/>
+		<param name="Controller_Gain" value="5"/>
+		<param name="distance_b" value="0.4"/>	<!-- b for control tuning -->
+	</node> 
+
+	<node pkg="fake_delegation" type="fake_delegation" name="fake_delegation" output="screen">
+	</node>		
+	
+<!--	<node pkg="rover_simulator" type="rover_sim" name="rover_sim" output="screen"> -->
+<!--	</node>	-->	
+	
+</launch>

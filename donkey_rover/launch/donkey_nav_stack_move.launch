@@ -1,0 +1,25 @@
+<launch>
+
+  <node pkg="tf" type="static_transform_publisher" name="link2_broadcaster" args="0.493 0 0 0 0 3.1416 /base_link /laser 100" />
+  <node pkg="tf" type="static_transform_publisher" name="link3_broadcaster" args="1.85 0 0 0 0 3.1416 /base_scanner  b_link 100" />
+  <node pkg="tf" type="static_transform_publisher" name="link3_1_broadcaster" args="-1.97 0 0 0 0.0 0 b_link camera_link 100" />
+  <node pkg="tf" type="static_transform_publisher" name="link4_broadcaster" args="0 0 0 0 0 0 camera_link openni_depth_frame  100" />
+ 
+  <arg name="host" default="192.168.0.1" />
+  <master auto="start"/>
+  <node pkg="lms1xx" name="lms1xx" type="LMS1xx_node" output="screen">
+  <param name="host" value="$(arg host)" />
+  <param name="frame_id" value="base_laser" />
+  </node>
+  <node pkg="joy" name="joy_node" type="joy_node" output="screen">
+  </node>
+  <node pkg="donkey_rover" name="rover_odom" type="rover_odom" output="screen">
+        <param name="send_odom" value="true" />
+  </node>
+ <arg name="map_file" default="$(find donkey_rover_2dnav)/map.yaml"/>
+
+  <!-- Run the map server -->
+  <node name="map_server" pkg="map_server" type="map_server" args="$(arg map_file)" />
+  <include file="$(find donkey_rover_2dnav)/move_base.launch" />
+</launch>
+

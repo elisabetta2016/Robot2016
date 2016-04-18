@@ -1,0 +1,170 @@
+#!/usr/bin/env python
+
+
+import rospy
+import os.path
+import sys
+import threading
+import math
+
+#LOS
+import time
+from Los.Client import Connection
+from Los.Types import *
+from Los.Util import *
+
+#GPS
+from custom_msgs.msg import gnssSample
+from custom_msgs.msg import positionEstimate 
+from custom_msgs.msg import orientationEstimate
+
+threshold = 10
+lat=0.0
+lon=0.0
+#fix=0.0
+h=0.0
+yaw =0.0
+
+def callback(data):
+    global lat
+    global lon
+    global fix
+    global h 
+    
+    print "callBack: latitude: %0.7f longitude: %0.7f h: %0.3f\n" % (data.latitude,data.longitude,data.hEll)    
+    lat=data.latitude   
+    lon=data.longitude
+    h=data.hEll 
+    #fix=data.fix
+
+def callbackEstimate(data):
+     global yaw
+     yaw= data.yaw 
+    # print "yaw: %0.2f" % yaw
+
+
+
+def moveTo(argv):  
+
+# #************************check the argument*********************
+    if len(argv) < 4:
+        sys.stderr.write("Usage: %s {GPS} [bool] {Localization.active} [bool] {X} [m] {Y} [m] {Theta} [rad] \n ex.:\n rosrun donkeyMoveToPose %s False False 0.5 0.0 0.5 \n\n rosrun donkeyMoveToPose %s True False 49.56789 11.45677 \n\n" % (os.path.basename(argv[0]),os.path.basename(argv[0]),os.path.basename(argv[0])))
+        return 2
+    if(argv[1]!="True" and argv[1]!="False"):
+        sys.stderr.write("The 1th argument must be False or True \n\n")
+        return 3
+    if(argv[2]!="True" and argv[2]!="False"):
+        sys.stderr.write("The 2th argument must be False or True \n\n")
+        return 3
+
+# #*****************connection to ANT************************
+
+    
+
+    proxy = Connection(("192.168.8.149", 1234), timeout=2.5)
+    proxy.open()
+    proxy.ping()
+    proxy.login("User", "none")
+    print "ANT is connencted."
+    
+
+    if(argv[1]=="False") :
+# #********************MOVE TO (RELATIVE POSE)*************************
+     x=float(argv[3]) 
+     y=float(argv[4])
+     theta=float(argv[5])
+
+    elif(argv[1]=="True") :
+# #********************MOVE TO (GEO)*************************
+
+     rospy.init_node('donkeyGPSListener', anonymous=True)
+     #rospy.Subscriber("mti/sensor/gnssPvt", gnssSample, callback)
+     rospy.Subscriber("mti/filter/orientation",orientationEstimate,callbackEstimate)
+     rospy.Subscriber("mti/filter/position",positionEstimate,callback)
+    #rospy.spin()
+
+    # while 1:
+     # if(fix!=0): break;
+     # time.sleep(2)
+     # print "wait..."
+
+    #calcolo le coordinate locali:
+     time.sleep(1)
+     print "\ncodice:\nlat=%0.7f lon=%0.7f h=%0.3f\n" % (lat,lon,h)
+     me=(6378137 * (1-math.exp(2)))/(abs((1-(math.exp(2)*(math.sin(lat)*math.sin(lat)))))**(1.5))
+     print "me= %0.6f\n" % me
+     ne=(6378137)/((abs(1-(math.exp(2)*(math.sin(lat))*math.sin(lat))))**(0.5))
+     print "ne= %0.6f\n" % ne
+     y=((float(argv[4])* math.pi/180.0)-(lon* math.pi/180.0))*(ne+h)*math.cos(lat)
+     x=((float(argv[3])* math.pi/180.0)-(lat* math.pi/180.0))*(me+h)
+     theta=float(argv[5])
+     print "CALCOLO ESEGUITO x: %f y: %f \n" % (x,y)
+        
+
+        
+     try :
+        proxy.configure(Struct({"ObstacleAvoidance.syncActive":True}))
+        if(argv[2]=="False"):
+            proxy.configure(Struct({"Localization.active": False}))
+        elif(argv[2]=='True'):
+            proxy.configure(Struct({"Localization.active":True}))
+        
+
+        proxy.Localization.snapToPose(0.0,0.0,0.0)	
+	counter = 0
+	#moveToPose(dest):
+	#proxy.Motion.moveToPose(Float64(x),Float64(y),Float64(theta))
+	#time.sleep(1) #cos entra nel ciclo che  in movimento
+
+        while 1 : 
+
+		#getGPSPosition ---> aggiornata dal topic
+		#getHeading /mti/filter/orientation/yaw  --->aggiornato dal topic
+
+		#getLocalDestination --> la calcolo a partire dal GPS position:
+    		print "\ndentro il while:"
+     		me=(6378137 * (1-math.exp(2)))/(abs((1-(math.exp(2)*(math.sin(lat)*math.sin(lat)))))**(1.5))     		
+     		ne=(6378137)/((abs(1-(math.exp(2)*(math.sin(lat))*math.sin(lat))))**(0.5))
+     		
+     		y=((float(argv[4])* math.pi/180.0)- (lon* math.pi/180.0))*(ne+h)*math.cos(lat)
+     		x=((float(argv[3])* math.pi/180.0)-(lat* math.pi/180.0))*(me+h)
+     		theta=float(argv[5])
+     		print "CALCOLO ESEGUITO x: %f y: %f " % (x,y)		
+		
+		#getDistance modulo:
+		distance = math.sqrt(x*x + y*y)
+		print "distance %0.3f" % distance
+
+		#getBearingToDestination atan(y/x) - yaw :
+        	
+	    	bearing = math.atan2(y,x) - yaw
+		print "bearing %0.3f" % bearing 
+
+		counter=counter + 1
+
+		#if(bearing>threshold)
+		#if(bearing > threshold) :
+		#	proxy.Motion.stop(True)
+		#	proxy.Motion.moveToPose(Float64(x),Float64(y),Float64(theta))
+		
+           	 
+
+
+
+     except Exception, e:
+        print str(e)
+      
+     finally :
+        try:
+            proxy.configure(Struct({"Localization.active":True}))
+        except Exception, e: 
+            print str(e)
+
+
+    proxy.close();
+   	
+if __name__ == '__main__':
+    try:
+        moveTo(sys.argv)
+    except rospy.ROSInterruptException:
+        pass

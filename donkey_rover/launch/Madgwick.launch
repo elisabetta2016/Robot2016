@@ -1,0 +1,6 @@
+<launch>
+  <node type="imu_filter_node" pkg="imu_filter_madgwick" name="imu_filter_node">
+    <param name="~use_magnetic_field_msg" value="true" />
+    <!--<param name="~use_mag" value="true" />-->
+  </node>
+</launch>

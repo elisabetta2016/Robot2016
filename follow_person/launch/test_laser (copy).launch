@@ -1,0 +1,16 @@
+<launch>
+    <node pkg="laser_scan_matcher" type="laser_scan_matcher_node" name="laser_scan_matcher_node" output="screen">
+        <remap from="imu/data" to="mti/sensor/imu"/>
+        <param name="~base_frame" value="base_link" />
+        
+    </node>
+    <node pkg="tf" type="static_transform_publisher" name="link2_broadcaster" args="0.493 0 0 0 0 3.1416 base_link base_laser 100" />
+    <node pkg="joy" name="joy_node" type="joy_node" output="screen">
+  </node>
+
+  <arg name="host" default="192.168.0.1" />
+  <master auto="start"/>
+  <node pkg="lms1xx" name="lms1xx" type="LMS1xx_node" output="screen">
+  <param name="host" value="$(arg host)" />
+  </node>
+</launch>

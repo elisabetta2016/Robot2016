@@ -1,0 +1,26 @@
+<Folder xmlns:gx="http://www.google.com/kml/ext/2.2" xmlns:atom="http://www.w3.org/2005/Atom" xmlns="http://www.opengis.net/kml/2.2">
+  <Placemark>
+    <name>prova1</name>
+    <Point>
+      <coordinates>64.5433,18.2342</coordinates>
+    </Point>
+  </Placemark>
+  <Placemark>
+    <name>prova1</name>
+    <Point>
+      <coordinates>64.5431,18.2341</coordinates>
+    </Point>
+  </Placemark>
+  <Placemark>
+    <name>prova1</name>
+    <Point>
+      <coordinates>64.5433,18.2342</coordinates>
+    </Point>
+  </Placemark>
+  <Placemark>
+    <name>prova1</name>
+    <Point>
+      <coordinates>64.5437,18.2346</coordinates>
+    </Point>
+  </Placemark>
+</Folder>

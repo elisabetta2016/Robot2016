@@ -1,0 +1,24 @@
+<launch>
+  <arg name="host" default="192.168.0.1" />
+  <node pkg="lms1xx" name="lms1xx" type="LMS1xx_node" output="screen">
+    <param name="host" value="$(arg host)" />
+  </node>
+
+  <node pkg="donkey_rover" type="donkey_rover" name="rover_odom" output="screen">
+  </node>
+
+  <node pkg="donkey_rover" type="donkey_rover" name="rover_drive" output="screen">
+  </node>
+
+  <node pkg="robot_setup_tf" type="robot_setup_tf" name="tf_broadcaster" output="screen">
+  </node>
+
+  <node pkg="robot_setup_tf" type="robot_setup_tf" name="tf_listener" output="screen">
+  </node>
+
+  <node name="costmap_node" pkg="costmap_2d" type="costmap_2d_node" >
+    <rosparam file="$(find costmap_2d)/launch/example_params.yaml" command="load" ns="costmap" />
+  </node>
+
+
+</launch>

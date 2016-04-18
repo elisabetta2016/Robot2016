@@ -1,0 +1,18 @@
+<launch>
+  <group ns="/wasp0">
+
+  <node name="tstfactory" pkg="lrs_tst" type="tstfactory" output="log" />
+  <node name="tstexecmanager" pkg="lrs_exec" type="tstexecmanager" output="log" />
+  <node name="resourceagent" pkg="lrs_resource" type="resourceagent" output="log" />
+
+    <!-- node name="waspexec" pkg="wasp_exec" type="waspexecutor" output="log"  / -->
+
+    <node name="dwdb" pkg="lrs_wdb" type="dwdb">
+      <rosparam>
+        capabilities: ["drive-to"]
+      </rosparam>
+    </node>
+
+  </group>
+
+</launch>
