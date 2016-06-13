@@ -28,7 +28,7 @@ def talker():
     while not rospy.is_shutdown():
 	msg = Scanner_Command()
 	msg.Scanner_Command = sys.argv[1] #'GoHome' #'Start' #
-	msg.Scanner_Ajustment_Angle = 0.00 #-math.pi/2  #rad -100 for no change
+	msg.Scanner_Ajustment_Angle = float(sys.argv[4])*math.pi/180; #-math.pi/2  #rad -100 for no change
  	msg.Scanner_Roll_Angle = math.pi/float(sys.argv[2]) #math.pi/3       #rad -100 for no change
 	msg.Scanner_Home_Angle = -100      #rad -100 for no change
 	msg.Scanner_Period = float(sys.argv[3])          #sec -100 for no 
@@ -41,8 +41,8 @@ def talker():
         rate.sleep()
 
 if __name__ == '__main__':
-    if len(sys.argv) != 4:
-        print('Error! Please inter 4 arguments, i.e. talker.py ~Command Pi/~Roll_angle ~Period')
+    if len(sys.argv) != 5:
+        print('Error! Please inter 4 arguments, i.e. talker.py ~Command Pi/~Roll_angle ~Period Adjustment_Angle(Deg)')
     else:
         try:
             talker()

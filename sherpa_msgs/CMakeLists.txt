@@ -59,6 +59,7 @@ find_package(catkin REQUIRED COMPONENTS
 	estimated_position.msg
 	Rover_Track_Speed.msg
 	fake_TST.msg
+	Attitude.msg
 )
 
 ## Generate services in the 'srv' folder

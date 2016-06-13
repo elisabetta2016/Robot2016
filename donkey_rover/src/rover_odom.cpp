@@ -1,17 +1,25 @@
 #include <ros/ros.h>
 #include <tf/transform_broadcaster.h>
+#include "libRover.h"
+#include <stdlib.h>
+#include <tf/transform_datatypes.h>
+#include <math.h>
+// Messages Standard
 #include <geometry_msgs/Twist.h>
 #include <nav_msgs/Odometry.h>
-#include "libRover.h"
 #include <sensor_msgs/Joy.h>
-#include <math.h>
+#include <sensor_msgs/Imu.h>
+#include <std_msgs/Float32.h>
+// Messages Custom
 #include "donkey_rover/Scanner_Command.h"
 #include "donkey_rover/Rover_Track_Speed.h"
 #include "donkey_rover/Rover_Track_Bogie_Angle.h"
 #include "donkey_rover/Rover_Scanner.h"
 #include "donkey_rover/Rover_Power_Data.h" 
-#include <stdlib.h>
-//#include <custom_msgs/velocityEstimate.h>
+#include "sherpa_msgs/Attitude.h"
+
+
+
 
 Rover rover(false);
 EScannerState state;
@@ -33,10 +41,11 @@ class DonkeyRoverClass
 			subFromJoystick_ 		= n_.subscribe("joy", 1, &DonkeyRoverClass::joyCallback,this);
 			subFromCMDVEL_ 			= n_.subscribe("cmd_vel", 1, &DonkeyRoverClass::CMDVELLCommander,this);
 			subFromScannerCommander_ 	= n_.subscribe("c1", 10, &DonkeyRoverClass::ScannerCommander,this);
-			//subFromIMUSpeed_= n_.subscribe("mti/filter/velocity", 10, &DonkeyRoverClass::imuspeed,this);
+			subFromIMU_			= n_.subscribe("imu/data", 1, &DonkeyRoverClass::ImuSet,this);
 			subFromRightLeftCommands_	= n_.subscribe("speedfollow", 5, &DonkeyRoverClass::RLcommander,this);
 			subFromscannerdata_		= n_.subscribe("scanner_data", 1, &DonkeyRoverClass::scannerRawValueSet,this);
 			subFromscannercommands_		= n_.subscribe("scanner_commands", 1, &DonkeyRoverClass::SetScanner,this);
+			subFromAttitude_		= n_.subscribe("attitude", 1, &DonkeyRoverClass::setAttitude,this);
 
 			// publishers
 			odom_pub 	   	  = n_.advertise<nav_msgs::Odometry>("odom", 100);
@@ -45,10 +54,30 @@ class DonkeyRoverClass
 			Rover_Track_Angles_pub    = n_.advertise<donkey_rover::Rover_Track_Bogie_Angle>("RoverTrackAngles", 100);	
 			Rover_Scanner_Data_pub    = n_.advertise<donkey_rover::Rover_Scanner>("RoverScannerInfo", 100);
 			Rover_Power_Data_pub      = n_.advertise<donkey_rover::Rover_Power_Data>("RoverPowerInfo", 100);
+			Scanner_debug_pub	  = n_.advertise<geometry_msgs::Vector3>("Scanner_Debug", 100);
+			Scanner_angle_pub	  = n_.advertise<std_msgs::Float32>("Scanner_angle_sync", 100);
+			
+			//Initializers
+			delta_scanner = 0.0;
+			last_scanner_value = 0.0;
+			scanner_offsetVal = 0.0;
+			scanner_hor_corrector = 0.0;
+			
+
 		}
 
-
-
+  		void ImuSet(const sensor_msgs::Imu::ConstPtr& msg){
+  			Quat_attitude = msg->orientation;
+  			Gyro_velocity = msg->angular_velocity;
+  		
+  		}
+		
+		void setAttitude(const sherpa_msgs::Attitude::ConstPtr& msg){
+			euler_attitude = msg->euler;
+			euler_attitude.z = euler_attitude.z + M_PI/2;
+			//Quat_attitude = msg->quaternion;
+		
+		}
 
 		void RLcommander(const geometry_msgs::Vector3::ConstPtr& s)
 		{
@@ -67,13 +96,41 @@ class DonkeyRoverClass
 		
 		void scannerRawValueSet(const geometry_msgs::Vector3::ConstPtr& vector)
 		{
-		geometry_msgs::Vector3 new_speed = *vector;
-			scannerRaw = new_speed.x;
-        		if (abs(old_scanner_speed - new_scanner_speed) > 100){
-              			old_scanner_speed = new_scanner_speed;      
+				scannerRaw = vector->x;
+				
+        	
+        			// Start Scanner Angle Loop 
+    				delta_scanner =scannerRaw - last_scanner_value;
+				if (delta_scanner > 10000) { 
+					scanner_offsetVal = scanner_offsetVal - 16383;
+					//ROS_INFO("Scanner offsetVal is %f, scannerRaw is %f", scanner_offsetVal, scannerRaw);
+					}
+				else if(delta_scanner < -10000){  
+					scanner_offsetVal = scanner_offsetVal + 16383;
+					//ROS_WARN("Scanner offsetVal is %f, scannerRaw is %f", scanner_offsetVal, scannerRaw);
+					}
+				last_scanner_value = scannerRaw;
 
-        		}
-        	new_scanner_speed = new_speed.y;
+				
+				scannerCal = scannerRaw + scanner_offsetVal + scanner_hor_corrector;
+				std_msgs::Float32 angle_msgs;
+				angle_msgs.data = scannerCal/244.6*M_PI/180;
+				Scanner_angle_pub.publish(angle_msgs);
+				
+    				tf::Quaternion scan_quart,scan_quart_back;
+    				scan_quart.setRPY     ((( scannerCal/244.6)*M_PI/180)+M_PI,0.0 , 0.0);// (scannerCal/23713)*M_PI/2)
+                    		scan_quart_back.setRPY((-(scannerCal/244.6)*M_PI/180)+M_PI,0.0 , 0.0);// (scannerCal/23713)*M_PI/2)
+    				broadcaster1.sendTransform(
+      				tf::StampedTransform(
+
+        			tf::Transform(scan_quart, tf::Vector3(0.0, 0.0, 0.0)), ros::Time::now(),"laser","base_laser")
+    				);
+    				broadcaster2.sendTransform(
+      				tf::StampedTransform(
+
+        			tf::Transform(scan_quart_back, tf::Vector3(0.0, 0.0, 0.0)), ros::Time::now(),"base_laser","base_scanner")
+    				);
+
 
 		}
 		
@@ -105,10 +162,11 @@ class DonkeyRoverClass
 		
 
 		int retCode;
+		if (!first_cycle){
 			//Commands
 			temp_scanner_command = scanner_command_msg.Scanner_Command;
  			 if (scanner_command_msg.Scanner_Command =="GoHome" && new_scanner_command ){
-                      scanner_horizontal = true;
+                      
     				  while (state != ESSIdle)
      			 	  {
        					cout << '.' << flush;
@@ -123,6 +181,7 @@ class DonkeyRoverClass
         		  	       ROS_ERROR("Scanner GoHome failed");
 
       				  }
+      				  scanner_horizontal = true;
   			 } else if(scanner_command_msg.Scanner_Command == "Start" && new_scanner_command)
   			 {
      			 	while (state != ESSIdle)
@@ -131,6 +190,7 @@ class DonkeyRoverClass
        					Time::sleep(1, 0);
        					retCode = rover.getScannerState(state);
       			 	}
+      			 	scannerRaw_init = scannerRaw;
       			 	retCode = rover.sendScannerCommand(ESCStart);
       			 	if (retCode != 0)
       			 	{
@@ -191,7 +251,7 @@ class DonkeyRoverClass
        					retCode = rover.getScannerState(state);
      				  }
      			 	  //retCode = rover.setScannerHomePosition(temp_home_angle);
-                      ROS_ERROR("Do Not change the home position, use the adjustment angle instead");
+                      		  ROS_ERROR("Do Not change the home position, use the adjustment angle instead");
       			 	  if (retCode != 0) ROS_ERROR("Set Scanner Home Angle failed");
 				  else ROS_INFO("Scanner Home Angle is successfully set to %f",temp_home_angle);	
 			}
@@ -210,6 +270,7 @@ class DonkeyRoverClass
 				  else ROS_INFO("Scanner Period is successfully set to %f",temp_scanner_period);	
 			}
 		}
+		}
 
 		void ScannerCommander(const geometry_msgs::Vector3::ConstPtr& vector)
 		{
@@ -222,7 +283,7 @@ class DonkeyRoverClass
     			 {
      			          ROS_ERROR("Failed TO Set Scanner Home Position");
   			 }*/
-             	//retCode = rover.getScannerState(state);
+             		 //retCode = rover.getScannerState(state);
  			 if (msg ==1 ){
     				  while (state != ESSIdle)
      			 	  {
@@ -292,7 +353,7 @@ class DonkeyRoverClass
 			int retCode;
   			float v=joy->axes[1];
   			float vth=joy->axes[2];
- 		    float a1=joy->buttons[4];
+ 		    	float a1=joy->buttons[4];
 			//ROS_INFO("JOY: [1] = %f [2] = %f [4] = %f", v, vth, a1);
   			if (joy->buttons[6]==1 || joy->buttons[7]==1) Joystick = true;
   			if (joy->buttons[6]==0 && joy->buttons[7]==0){
@@ -417,18 +478,19 @@ class DonkeyRoverClass
 			{
 				ROS_ERROR("Failed to Read Angle of Tracks, Try to Restart the Rover");
   			}
-			////////////////SCANNER STATE////////////////////	
-			//retCode = rover.getScannerState(state);
+			////////////////SCANNER STATE////////////////////
+			EScannerState state2;	
+			retCode = rover.getScannerState(state2);
 			if (retCode != 0)
 			{
 				ROS_ERROR("Failed to Read Scanner State, Try to Restart the Rover");
   			}
-			if(state == ESSUnknown) 	 outputScanner.Scanner_State = "Unknown!";
-			if(state == ESSIdle)   		 outputScanner.Scanner_State = "Idle";
-			if(state == ESSCommandReceived ) outputScanner.Scanner_State = "CommandReceived";
-			if(state == ESSHoming) 		 outputScanner.Scanner_State = "Homing";
-			if(state == ESSGoingHome) 	 outputScanner.Scanner_State = "GoingHome";
-			if(state == ESSRolling) 	 outputScanner.Scanner_State = "Rolling ";
+			if(state2 == ESSUnknown) 	 outputScanner.Scanner_State = "Unknown!";
+			if(state2 == ESSIdle)   		 outputScanner.Scanner_State = "Idle";
+			if(state2 == ESSCommandReceived ) outputScanner.Scanner_State = "CommandReceived";
+			if(state2 == ESSHoming) 		 outputScanner.Scanner_State = "Homing";
+			if(state2 == ESSGoingHome) 	 outputScanner.Scanner_State = "GoingHome";
+			if(state2 == ESSRolling) 	 outputScanner.Scanner_State = "Rolling";
 
 			retCode = rover.getScannerPeriod(temp_Scanner_Period);
 			if (retCode != 0)
@@ -441,7 +503,7 @@ class DonkeyRoverClass
 				ROS_ERROR("Failed to Read Scanner Adjustment angle, Try to Restart the Rover");
   			}
 			retCode = rover.getScannerAngle(temp_Scanner_roll_angle);
-            roll_angle = temp_Scanner_roll_angle;
+            		roll_angle = temp_Scanner_roll_angle;
 			if (retCode != 0)
 			{
 				ROS_ERROR("Failed to Read Scanner Roll angle, Try to Restart the Rover");
@@ -502,8 +564,8 @@ class DonkeyRoverClass
 			outputScanner.Scanner_roll_angle = temp_Scanner_roll_angle;
 			outputScanner.Scanner_angle = scannerCal;
 			outputScanner.Scanner_angle_encoder = scannerCal;
-			outputScanner.Scanner_angle_degree = (scannerCal/21882)*90;
-			outputScanner.Scanner_angle = (scannerCal/21882)*M_PI/2;
+			outputScanner.Scanner_angle_degree = scannerCal/244.6;
+			outputScanner.Scanner_angle = (scannerCal/244.6)*M_PI/180;
  			outputScanner.header.stamp = current_time;
    	 		outputScanner.header.frame_id = "base_link";
 			outputScanner.TimeStamp = current_time.toSec();
@@ -532,88 +594,52 @@ class DonkeyRoverClass
 		    // Handling the parameters
   			ros::NodeHandle n("~");
    			n.param("send_odom", send_odom_, false);
+   			n.param("odom_3D", odom_3D_, false);
    			
    			//Variables
   			float x = 0.0;
   			float y = 0.0;
+  			float z = 0.0;
   			float th = 0.0;
-  			float v;
-  			float vx = 0.1;
-  			float vy = -0.1;
- 		 	float vth;
+  			float v = 0.0;
+  			float vx = 0.0;
+  			float vy = 0.0;
+  			float vz = 0.0;
+ 		 	float vth = 0.0;
   			int count = 0;
   			cout << '*' <<endl;
   			ROS_INFO("Sending Odom Transform by rover_odom : %d", send_odom_);
   			if (Low_Battery) ROS_WARN("Battery Low");
 			// Start Scanner angle calcultion - Defining variables
-			float delta_scanner = 0;
-			float last_scanner_value = 0;
-			float scanner_offsetVal = 0;
-            float scanner_hor_corrector = 0;
-			tf::TransformBroadcaster broadcaster1;
-            tf::TransformBroadcaster broadcaster2;
-            scannerCal_max = roll_angle * 21882 * 2 / M_PI;
-            new_scanner_speed = 0;
-            old_scanner_speed = 0;
+
 			// End Scanner angle calcultion - Defining variables
 			int retCode;
   			ros::Time current_time, last_time;
   			current_time = ros::Time::now();
   			last_time = ros::Time::now();
 			ros::Rate loop_rate(rate);
-            bool speed_dec_flag = false;
+
+			//Initializing Quat_attitude
+			Quat_attitude.w = 1;
+            		Quat_attitude.x = 0;
+            		Quat_attitude.y = 0;
+            		Quat_attitude.z = 0;
+            		
   			while(ros::ok()){
 
 				// Start Scanner Angle Loop 
-    				delta_scanner =scannerRaw - last_scanner_value;
-				if (delta_scanner > 10000)       scanner_offsetVal = scanner_offsetVal - scannerRaw;
-				else if(delta_scanner < -10000)  scanner_offsetVal = scanner_offsetVal + last_scanner_value;
-				last_scanner_value = scannerRaw;
-				scannerCal = scannerRaw + scanner_offsetVal + scanner_hor_corrector;
-    				tf::Quaternion scan_quart,scan_quart_back;
-    				scan_quart.setRPY(((scannerCal/scannerCal_max)*roll_angle)+M_PI,0.0 , 0.0);
-                    scan_quart_back.setRPY((-(scannerCal/scannerCal_max)*roll_angle)+M_PI,0.0 , 0.0);
-    				broadcaster1.sendTransform(
-      				tf::StampedTransform(
 
-        			tf::Transform(scan_quart, tf::Vector3(0.0, 0.0, 0.0)), ros::Time::now(),"laser","base_laser")
-    				);
-    				broadcaster2.sendTransform(
-      				tf::StampedTransform(
-
-        			tf::Transform(scan_quart_back, tf::Vector3(0.0, 0.0, 0.0)), ros::Time::now(),"base_laser","base_scanner")
-    				);
-
-                 
-                 if (abs(scannerCal) > (roll_angle * scannerCal_max * 2 * 0.8 / M_PI ))
-                 {
-                         //ROS_INFO("Sono Qua");
-                         
-                         if ((new_scanner_speed - old_scanner_speed) < 150 ) {speed_dec_flag = true;/*ROS_ERROR("Sono Qua");*/}
-                         if ( speed_dec_flag && ((new_scanner_speed - old_scanner_speed) > 150) ) {
-                               //ROS_ERROR("Sono Qua");
-                               speed_dec_flag = false;
-                               if (new_roll_angle_2) {
-                                        scannerCal_max = scannerCal;
-                                        new_roll_angle_2 = false;
-                                        ROS_WARN("Maxencoder val is set to %f", scannerCal_max);
-                               }
-                               scannerCal = scannerCal_max * scannerCal/abs(scannerCal);
-                         }
-                         
-                 }
-                //Horizontal angle corrector
-                EScannerState state1;
-                retCode = rover.getScannerState(state1);
-
-                if (state1 == ESSIdle && scanner_horizontal)
-                {
-                        //ROS_WARN("Sono Qua"); Critical 
-                        ros::Duration(1).sleep();
-                        scanner_hor_corrector = -scannerCal;
-                        scanner_horizontal = false;
-                }
+				if (first_cycle && scannerRaw > 0 && count/rate > 2) {
+					scanner_hor_corrector = -scannerRaw - scanner_offsetVal;
+					ROS_WARN("scanner hor corrector is %f", scanner_hor_corrector);
+					first_cycle = false;
+				}
+				
 				// END Scanner Angle Loop
+                		EScannerState state1;
+                		retCode = rover.getScannerState(state1);
+
+
     				Time timestamp;
     				ros::spinOnce();               // check for incoming messages
     				current_time = ros::Time::now();
@@ -624,36 +650,70 @@ class DonkeyRoverClass
      					// Failed to read the rover speed
 					ROS_ERROR("Failed to read the rover speed");
    				 }
-
-
+   				 
+   				//Replacing angular velocity with Gyrospeed if vth is not zero
+   				if(abs(vth)>0.00001){
+   				    //ROS_INFO_ONCE(" Che palle ! vth = %f", vth);
+   				    vth = Gyro_velocity.z;
+   				} else vth = 0.0;
+   				
+   				// Calculating 3D Speed and Pose
+   				tf::Matrix3x3 Rot_Matrix;
+   				tf::Quaternion Quat_attitude_tf;
+   				tf::quaternionMsgToTF(Quat_attitude, Quat_attitude_tf);
+				Rot_Matrix = tf::Matrix3x3(Quat_attitude_tf);
+				tf::Vector3 V_IF_vector =  Rot_Matrix.getColumn(1);
     				// Correction applied
-    				vx = v * cos(th);    
-    				vy = v * sin(th);
-
-
+    				
+			    	//vy = v * sin(th);    
+    				//vx = v * cos(th);
+				
+				vy = v * cos(th);
+				vx = -v * sin(th);
 
     				//compute odometry in a typical way given the velocities of the robot
     				float dt = (current_time - last_time).toSec();
-    				float delta_x = (vx * cos(th) - vy * sin(th)) * dt;
-    				float delta_y = (vx * sin(th) + vy * cos(th)) * dt;
+    				float delta_y;
+    				float delta_x;
+    				float delta_z = 0;
     				float delta_th = vth * dt;
     				delta_x = vx * dt;
     				delta_y = vy * dt;
+    				if (odom_3D_)
+    				{
+    					ROS_INFO_ONCE("3D Odometry");
+    					delta_x = v*V_IF_vector.getX() * dt;
+    					delta_y = v*V_IF_vector.getY() * dt;
+    					delta_z = v*V_IF_vector.getZ() * dt;
+    				}
     				x += delta_x;
     				y += delta_y;
+    				z += delta_z;
     				th += delta_th;
+
     				//since all odometry is 6DOF we'll need a quaternion created from yaw
-    				geometry_msgs::Quaternion odom_quat = tf::createQuaternionMsgFromYaw(th);
+    				
+  				//tf::Quaternion quat;
+  				//quat.setEuler(euler_attitude.x,euler_attitude.y,euler_attitude.z);
+  				
+  				geometry_msgs::Quaternion odom_quat;
+  				if (odom_3D_)
+  					odom_quat = Quat_attitude;
+  				else
+  					odom_quat = tf::createQuaternionMsgFromYaw(th);
+  				//tf::quaternionTFToMsg(quat,odom_quat);
+    				//geometry_msgs::Quaternion odom_quat = tf::createQuaternionMsgFromYaw(th);
+    				// euler_attitude should go to the Quaternion instead
 
     				//first, we'll publish the transform over tf
     				geometry_msgs::TransformStamped odom_trans;
     				odom_trans.header.stamp = current_time;
     				odom_trans.header.frame_id = "odom";
-    				odom_trans.child_frame_id = "base_link";
+    				odom_trans.child_frame_id = "Imu_link";
 
     				odom_trans.transform.translation.x = x;
-   				    odom_trans.transform.translation.y = y;
-    				odom_trans.transform.translation.z = 0.0;
+   				odom_trans.transform.translation.y = y;
+    				odom_trans.transform.translation.z = z;
     				odom_trans.transform.rotation = odom_quat;
 
     				//send the transform
@@ -663,30 +723,39 @@ class DonkeyRoverClass
     				//next, we'll publish the odometry message over ROS
     				
     				odom.header.stamp = current_time;
-   	 			    odom.header.frame_id = "odom";
+   	 			odom.header.frame_id = "odom";
     				
 
     				//set the position
     				odom.pose.pose.position.x = x;
     				odom.pose.pose.position.y = y;
-    				odom.pose.pose.position.z = 0.0;
+    				odom.pose.pose.position.z = z;
     				odom.pose.pose.orientation = odom_quat;
 
     				//set the velocity
-    				odom.child_frame_id = "base_link";
+    				odom.child_frame_id = "Imu_link";
     				odom.twist.twist.linear.x = vx;
     				odom.twist.twist.linear.y = vy;
-    				odom.twist.twist.angular.z = vth;
+    				odom.twist.twist.linear.z = vz;
+    				odom.twist.twist.angular.x = Gyro_velocity.x;
+    				odom.twist.twist.angular.y = Gyro_velocity.y;
+    				odom.twist.twist.angular.z = Gyro_velocity.z;
     				tw.linear.x = VX;
     				tw.linear.y = VY;
 
     				//publish the message
     				odom_pub.publish(odom);
     				twist_pub.publish(tw);
-				    RoverDataProvider();
+				RoverDataProvider();
     				last_time = current_time;
+    				//Publishing scanner debug
+                		Scan_debug.x = scannerRaw;
+				Scan_debug.y = scannerCal;
+				Scan_debug.z = (scannerCal/244.6);
+				Scanner_debug_pub.publish(Scan_debug);
     				count ++;
 				loop_rate.sleep();
+			
   				}
 		}
 				
@@ -697,13 +766,15 @@ class DonkeyRoverClass
 		ros::NodeHandle n_;
 		
 		// Subscribers
+		ros::Subscriber subFromAttitude_;
 		ros::Subscriber subFromJoystick_;
 		ros::Subscriber subFromCMDVEL_;
 		ros::Subscriber subFromScannerCommander_;
-		//ros::Subscriber subFromIMUSpeed_;
-	    ros::Subscriber subFromRightLeftCommands_;
+		ros::Subscriber subFromIMU_;
+	    	ros::Subscriber subFromRightLeftCommands_;
 		ros::Subscriber subFromscannerdata_;
 		ros::Subscriber subFromscannercommands_;
+		
 		// Publishers
 		ros::Publisher odom_pub;
 		ros::Publisher twist_pub;
@@ -711,33 +782,49 @@ class DonkeyRoverClass
 		ros::Publisher Rover_Track_Angles_pub;
 		ros::Publisher Rover_Scanner_Data_pub;
 		ros::Publisher Rover_Power_Data_pub;
+		ros::Publisher Scanner_debug_pub;
+		ros::Publisher Scanner_angle_pub;
+		
 
 		nav_msgs::Odometry odom;
 		tf::TransformBroadcaster odom_broadcaster;
 		geometry_msgs::Twist tw;
+		geometry_msgs::Vector3 Scan_debug;
 		donkey_rover::Rover_Track_Speed outputTrackSpeed;
 		donkey_rover::Rover_Scanner outputScanner;
 		donkey_rover::Rover_Track_Bogie_Angle outputBogieAngle;
 		donkey_rover::Rover_Power_Data outputPower;
 
-		int rate = 100;
+		int rate = 150;
 		bool send_odom_;
-        float roll_angle;
-        float scanner_en_speed = 0;
-        float scannerCal_max;
-        bool new_roll_angle_2 = true;
-        bool scanner_horizontal = false;
-        float new_scanner_speed;
-        float old_scanner_speed;
-        bool Joystick = false;
+		bool odom_3D_;
+        	float roll_angle;
+        	bool new_roll_angle_2 = true;
+        	bool scanner_horizontal = false;
+        	bool Joystick = false;
+        	float scannerRaw_init;
+        	float scanner_hor_corrector;
+        	bool first_cycle = true;
+  		geometry_msgs::Vector3 euler_attitude;
+  		geometry_msgs::Vector3 Gyro_velocity;
+  		geometry_msgs::Quaternion Quat_attitude;
+  
 
 	private:
 
 		float temp_adjustment_angle = -100;
-        float temp_roll_angle = -100;
-        float temp_home_angle = -100;
-        float temp_scanner_period = -100;
-        string temp_scanner_command = "Ciao";
+        	float temp_roll_angle = -100;
+        	float temp_home_angle = -100;
+        	float temp_scanner_period = -100;
+       	 	string temp_scanner_command = "Ciao";
+
+       	 	// Scanner angle variables
+       	 	float delta_scanner = 0;
+		float last_scanner_value = 0;
+		float scanner_offsetVal = 0;
+		            		
+		tf::TransformBroadcaster broadcaster1;
+            	tf::TransformBroadcaster broadcaster2;
         
 		
 };

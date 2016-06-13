@@ -9,6 +9,7 @@ find_package(catkin REQUIRED COMPONENTS
   pcl_ros
   roscpp
   sensor_msgs
+  laser_assembler
 )
 
 ## System dependencies are found with CMake's conventions

@@ -5,19 +5,18 @@
 #include <pcl/point_cloud.h>
 #include <pcl/point_types.h>
 #include <sensor_msgs/Imu.h> 
-#include "donkey_rover/Rover_Track_Speed.h"
+#include <donkey_rover/Rover_Track_Speed.h>
 #include <iostream>
-#include <pcl/point_types.h>
 #include <pcl/registration/icp.h>
 #include <pcl/filters/filter.h>
 #include <pcl/filters/voxel_grid.h>
-#include <tf/transform_broadcaster.h> // Tf should be listed in the dependencies 
+#include <tf/transform_broadcaster.h> // Tf should be listed in the dependencies
 
 
 class icpClass
 {
 	public:
-		
+			
 		icpClass(ros::NodeHandle& node)
 		{
 			//node
@@ -26,7 +25,8 @@ class icpClass
 			subPointCloud_	= n_.subscribe("/camera/depth/points", 1, &icpClass::cloud_cb,this);
 			subImu_ = n_.subscribe("imu/data", 1, &icpClass::imu_cb, this);
 			subRoverTrackSpeed_ = n_.subscribe("RoverTrackSpeed", 1, &icpClass::roverTrackSpeed_cb, this);
-			//Publishers TO BE DONE
+			//Publisher
+			pubTransMatrix_ = n_.advertise<icp::matrix>("TransMatrix", 1);
 		}
 
 		void roverTrackSpeed_cb (const donkey_rover::Rover_Track_Speed::ConstPtr& rts_msg)
@@ -35,7 +35,7 @@ class icpClass
 		  received_rover_track_speed = true;
 		  if(received_imu)
 		  	//If I receive a RoverTrackSpeed msg and I received an imu msg I calculate the movement
-		  	calculatePosition(rover_track_speed_msg_->header.stamp);
+		  	calculatePosition(rover_track_speed_msg_.header.stamp);
 		}
 
 		void imu_cb (const sensor_msgs::Imu::ConstPtr& imu_msg)
@@ -44,152 +44,95 @@ class icpClass
 		  received_imu = true;
 		  if(received_rover_track_speed)
 		  	//If I receive an imu msg and I received a RoverTrackSpeed msg I calculate the movement
-		  	calculatePosition(imu_msg_->header.stamp);
+		  	calculatePosition(imu_msg_.header.stamp);
 		}
 		
 		void cloud_cb (const sensor_msgs::PointCloud2ConstPtr& input)
 		{
+  			if (!cloud_process){
+				cloud_process = true; // Cloud process started
+	  			//Converting sensor_msgs::PointCloud2 to pcl::PointCloud<pcl::PointXYZ>
+	  			
+	  			pcl::PCLPointCloud2::Ptr pcl_pc2 (new pcl::PCLPointCloud2);
+	  			pcl_conversions::toPCL(*input,*pcl_pc2);
 
-  		// TO be Done -- The system must calculate the speed out of two consecutive point clouds and transform a TF
-  		// To be done later, taking to account an initial estimation from IMU
-  		if (!cloud_process){
-			cloud_process = true; // Cloud process started
-  			//Converting sensor_msgs::PointCloud2 to pcl::PointCloud<pcl::PointXYZ>
-  			
-  			pcl::PCLPointCloud2::Ptr pcl_pc2 (new pcl::PCLPointCloud2);
-  			pcl_conversions::toPCL(*input,*pcl_pc2);
+	  			icp::matrix matrix_msg;
+	  			ros::Time current_time;
+  				current_time = ros::Time::now();
 
 
-  			//Voxelgrid filtering
-  			ROS_INFO("Start voxel filtering");
-  			pcl::PCLPointCloud2 cloud_filtered;
-  			pcl::VoxelGrid<pcl::PCLPointCloud2> sor;
-  			sor.setInputCloud (pcl_pc2);
-  			sor.setLeafSize (0.1, 0.1, 0.1);
-  			sor.filter (cloud_filtered);
+	  			//Voxelgrid filtering
+	  			ROS_INFO("Start voxel filtering");
+	  			pcl::PCLPointCloud2 cloud_filtered;
+	  			pcl::VoxelGrid<pcl::PCLPointCloud2> sor;
+	  			sor.setInputCloud (pcl_pc2);
+	  			sor.setLeafSize (0.1, 0.1, 0.1);
+	  			sor.filter (cloud_filtered);
 
-  			// Convert data type PointCloud2 -> PointCloud<pcl::PointXYZ> 
-  			pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_in (new pcl::PointCloud<pcl::PointXYZ>);
- 		 	pcl::fromPCLPointCloud2(cloud_filtered,*cloud_in);
-  
-  			//Creating the cloud_out which is only a shifted cloud_in
-  			pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_out (new pcl::PointCloud<pcl::PointXYZ>);
+	  			// Convert data type PointCloud2 -> PointCloud<pcl::PointXYZ> 
+	  			pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_in (new pcl::PointCloud<pcl::PointXYZ>);
+	 		 	pcl::fromPCLPointCloud2(cloud_filtered,*cloud_in);
+	  
+	  			//Creating the cloud_out which is only a shifted cloud_in
+	  			pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_out (new pcl::PointCloud<pcl::PointXYZ>);
 
-  			// Filtering out NAN values
-  			std::vector<int> mapping;
-  			pcl::removeNaNFromPointCloud(*cloud_in, *cloud_in, mapping);
+	  			// Filtering out NAN values
+	  			std::vector<int> mapping;
+	  			pcl::removeNaNFromPointCloud(*cloud_in, *cloud_in, mapping);
 			
-			//Saving the first Cloud _ to be run only once
-  			if (first_exe) {
-				*last_cloud = cloud_in;
-				first_exe = false;
-			}
-  			
-  			double vector[4], result[4];
+				//Saving the first Cloud _ to be run only once
+	  			if (first_exe) {
+					last_cloud = *cloud_in;
+					first_exe = false;
+				}
+				
+				pcl::PointCloud<pcl::PointXYZ>::Ptr last_cloud_ptr (&last_cloud);
+	  			
+	  			double vector[4], result[4];
 
-  			for(i = 0; i < 4; i++)
-  				result[i] = 0;
+	  			for(i = 0; i < 4; i++)
+	  				result[i] = 0;
 
-  			if(flag) {
-  				for(i = 0; i < last_cloud->points.size(); i++) {
-  					vector[0] = last_cloud->points[i].x;
-  					vector[1] = last_cloud->points[i].y;
-  					vector[2] = last_cloud->points[i].z;
-  					vector[3] = 1;
-  					for (j = 0; j < 4; j++)
-	  					for (k = 0; k < 4; k ++){
-	  						result[j] += curr_matrix[j][k] * vector[k];
-	  					}
-	  				last_cloud->points[i].x = result[0];
-  					last_cloud->points[i].y = result[1];
-  					last_cloud->points[i].z = result[2];
-  				}	
-  				flag = false;
-  			}
+	  			if(flag) {
+	  				for(i = 0; i < (last_cloud_ptr->points.size()); i++) {
+	  					vector[0] = last_cloud_ptr->points[i].x;
+	  					vector[1] = last_cloud_ptr->points[i].y;
+	  					vector[2] = last_cloud_ptr->points[i].z;
+	  					vector[3] = 1;
+	  					for (j = 0; j < 4; j++)
+		  					for (k = 0; k < 4; k ++)
+		  						result[j] += curr_matrix[j][k] * vector[k];
+		  				last_cloud_ptr->points[i].x = result[0];
+	  					last_cloud_ptr->points[i].y = result[1];
+	  					last_cloud_ptr->points[i].z = result[2];
+	  				}	
+	  				flag = false;
+	  				prev_matrix[4][4] = {{1.0, 1.0, 1.0, 1.0}, {1.0, 1.0, 1.0, 1.0}, {1.0, 1.0, 1.0, 1.0}, {1.0, 1.0, 1.0, 1.0}};
+	  				curr_matrix[4][4] = {{1.0, 1.0, 1.0, 1.0}, {1.0, 1.0, 1.0, 1.0}, {1.0, 1.0, 1.0, 1.0}, {1.0, 1.0, 1.0, 1.0}};
+	  			}
 
 
-		  	//Start ICP
-  			ROS_WARN("ICP Starts!");
-  			pcl::IterativeClosestPoint<pcl::PointXYZ, pcl::PointXYZ> icp;
-  			icp.setInputSource(last_cloud);
-  			icp.setInputTarget(cloud_in);
-  			pcl::PointCloud<pcl::PointXYZ> Final;
-  			icp.align(Final);
-  			std::cout << "has converged:" << icp.hasConverged() << " score: " <<
-  			icp.getFitnessScore() << std::endl;
-  			std::cout << icp.getFinalTransformation() << std::endl;
-  			ROS_INFO("ICP Done!");
-  			cloud_process = false;  //Cloud process flag, ready to analyse the next cloud
-  			// Saving the last_cloud for the next iteration
-			*last_cloud = cloud_in;
-  			//pub.publish (output);
+			  	//Start ICP
+	  			ROS_WARN("ICP Starts!");
+	  			pcl::IterativeClosestPoint<pcl::PointXYZ, pcl::PointXYZ> icp;
+	  			icp.setInputSource(last_cloud_ptr);
+	  			icp.setInputTarget(cloud_in);
+	  			pcl::PointCloud<pcl::PointXYZ> Final;
+	  			icp.align(Final);
+	  			std::cout << "has converged:" << icp.hasConverged() << " score: " << icp.getFitnessScore() << std::endl;
+	  			//std::cout << icp.getFinalTransformation() << std::endl; //don't work
+	  			matrix_msg.matrix = icp.getFinalTransformation();
+	  			matrix_msg.header.stamp = current_time;
+   	 			matrix_msg.header.frame_id = "icp_matrix";
+				matrix_msg.TimeStamp = current_time.toSec();
+	  			pubTransMatrix_.publish(matrix_msg);
+	  			ROS_INFO("ICP Done!");
+	  			cloud_process = false;  //Cloud process flag, ready to analyse the next cloud
+	  			// Saving the last_cloud for the next iteration
+				last_cloud = *cloud_in;
   		    }
 		}
-
-		void run()
-		{
-			ros::Rate loop_rate(rate);
-
-			while (ros::ok())
-			{
-				//ROS_INFO_ONCE("ICP Started");
-
-				//icp_handle();
-				ros::spinOnce();
-				loop_rate.sleep();
-			}
-		}
-
-	protected:
-		// NodeHandle
-		ros::NodeHandle n_;
 		
-		// Subscribers
-		ros::Subscriber subPointCloud_;
-		ros::Subscriber imu_subscriber_;
-		ros::Subscriber rover_track_speed_subscriber_;
-	
-		
-		// Publishers - the transformation should be published 
-
-		
-		//Other variables
-		bool cloud_process = false;
-		float rate = 10.0;
-
-	private:
-		//last_cloud
-		pcl::PCLPointCloud2::Ptr last_cloud (new pcl::PCLPointCloud2);	
-		bool first_exe = false;
-		bool received_imu = false;
-		bool received_rover_track_speed = false;
-		bool flag = false;
-
-		int i, j, k;
-
-		double matrix[4][4];
-		double curr_matrix[4][4];
-		double prev_matrix[4][4];
-		for(i = 0; i < 4; i++)
-			for(j = 0; j < 4; j++)
-				prev_matrix[i][j] = 1.0;
-
-		double speed_x = 0.0, speed_y = 0.0, speed_z = 0.0;
-		double prev_time = 0.0, curr_time = 0.0, dt = 0.0;
-		//Translation
-		double Tx = 0.0, Ty = 0.0, Tz = 0.0;
-		double prev_Tx = 0.0, prev_Ty = 0.0, prev_Tz = 0.0;
-		//New position
-		double curr_pos_x = 0.0, curr_pos_y = 0.0, curr_pos_z = 0.0;
-		double curr_roll = 0.0, curr_pitch = 0.0, curr_yaw = 0.0;
-		double dR = 0.0, dP = 0.0, dY = 0,0;
-		//Previous position
-		double prev_pos_x = 0.0, prev_pos_y = 0.0, prev_pos_z = 0.0;
-		double prev_roll = 0.0, prev_pitch = 0.0, prev_yaw = 0.0;
-
-		sensor_msgs::Imu imu_msg_;
-		donkey_rover::Rover_Track_Speed rover_track_speed_msg_;
-
 		void calculatePosition(const ros::Time& time) 
 		{
 			curr_time = time.toSec();
@@ -237,12 +180,12 @@ class icpClass
 		    matrix[1][0] = vect1.getY();
 		    matrix[2][0] = vect1.getZ();
 		    matrix[3][0] = 0.0;
-		    tf::Vector3 vect2 =  finalRot.getColumn(1);
+		    tf::Vector3 vect2 = finalRot.getColumn(1);
 		    matrix[0][1] = vect2.getX();
 		    matrix[1][1] = vect2.getY();
 		    matrix[2][1] = vect2.getZ();
 		    matrix[3][1] = 0.0;
-		    tf::Vector3 vect3 =  finalRot.getColumn(2);
+		    tf::Vector3 vect3 = finalRot.getColumn(2);
 		    matrix[0][2] = vect3.getX();
 		    matrix[1][2] = vect3.getY();
 		    matrix[2][2] = vect3.getZ();
@@ -290,9 +233,94 @@ class icpClass
 			prev_Tx = Tx;
 			prev_Ty = Ty;
 			prev_Tz = Tz;
-			prev_matrix = curr_matrix;
+			int i, j;
+			for(i = 0; i < 4; i++)
+				for(j = 0; j < 4; j++)
+					prev_matrix[i][j] = curr_matrix[i][j];
 		}
-}
+
+		void run()
+		{
+			ros::Rate loop_rate(rate);
+
+			while (ros::ok())
+			{
+				//ROS_INFO_ONCE("ICP Started");
+
+				//icp_handle();
+				ros::spinOnce();
+				loop_rate.sleep();
+			}
+		}
+
+	protected:
+		// NodeHandle
+		ros::NodeHandle n_;
+		
+		pcl::PointCloud<pcl::PointXYZ> last_cloud;
+		
+		// Subscribers
+		ros::Subscriber subPointCloud_;
+		ros::Subscriber subImu_;
+		ros::Subscriber subRoverTrackSpeed_;
+	
+		
+		// Publisher
+		ros::Publisher pubTransMatrix_; 
+
+		
+		//Other variables
+		bool cloud_process = false;
+		float rate = 10.0;
+
+	private:
+		bool first_exe = false;
+		bool received_imu = false;
+		bool received_rover_track_speed = false;
+		bool flag = false;
+
+		int i;
+		int j;
+		int k;
+
+		double matrix[4][4];
+		double curr_matrix[4][4];
+		double prev_matrix[4][4] = {{1.0, 1.0, 1.0, 1.0}, {1.0, 1.0, 1.0, 1.0}, {1.0, 1.0, 1.0, 1.0}, {1.0, 1.0, 1.0, 1.0}};
+
+		double speed_x = 0.0;
+		double speed_y = 0.0;
+		double speed_z = 0.0;
+		double prev_time = 0.0;
+		double curr_time = 0.0;
+		double dt = 0.0;
+		//Translation
+		double Tx = 0.0;
+		double Ty = 0.0;
+		double Tz = 0.0;
+		double prev_Tx = 0.0;
+		double prev_Ty = 0.0;
+		double prev_Tz = 0.0;
+		//New position
+		double curr_pos_x = 0.0;
+		double curr_pos_y = 0.0;
+		double curr_pos_z = 0.0;
+		double curr_roll = 0.0;
+		double curr_pitch = 0.0;
+		double curr_yaw = 0.0;
+		double dR = 0.0;
+		double dP = 0.0;
+		double dY = 0.0;
+		//Previous position
+		double prev_pos_x = 0.0;
+		double prev_pos_y = 0.0;
+		double prev_pos_z = 0.0;
+		double prev_roll = 0.0;
+		double prev_pitch = 0.0;
+		double prev_yaw = 0.0;
+
+		sensor_msgs::Imu imu_msg_;
+		donkey_rover::Rover_Track_Speed rover_track_speed_msg_;
+};
 
 int
 main (int argc, char** argv)
