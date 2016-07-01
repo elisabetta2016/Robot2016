@@ -46,7 +46,7 @@
 #include <costmap_2d/layer.h>
 #include <costmap_2d/costmap_2d_ros.h>
 #include <costmap_2d/costmap_2d_publisher.h>
-
+#include <list>
 // TF
 #include <tf/transform_listener.h>
 #include <Eigen/Dense> 
@@ -354,21 +354,24 @@ class ObstacleDetectorClass
 		
 	
 	
-	}  	
+	} 
+	
+	lethal_inflation();
   	// Costmap2DPublisher
+  	
   	master_grid_ros->publishCostmap();
   	
 	}
 	
-	/*
+	
 	void lethal_inflation() //fill the cell around the lethal obstacle
 	{
-	
-		list<int> list_x_lethal; //create two list
-		list<int> list_y_lethal;
-		float lethal_rad = 0.2;
+	    
+		std::list<int> list_x_lethal; //create two list
+		std::list<int> list_y_lethal;
+		float lethal_rad = 0.1;
 		
-		
+	  	
 		for (unsigned int i=0; i < cell_x ; i++) //loop in x
 		{
 			for (unsigned int j=0; j < cell_y ; j++) //loop in y
@@ -380,10 +383,11 @@ class ObstacleDetectorClass
 				}
 			}
 		}
+		
 		//loop in the list of lethal obstacles
-		for (int k=0; k < list_x_lethal.size(); j++) //or list_y_lethal.size(), it's the same
+		for (int k=0; k < list_x_lethal.size(); k++) //or list_y_lethal.size(), it's the same
 		{
-			int cell_around = (float) floor(fabs(lethal_rad/costmap_res));
+			int cell_around = (int) floor(fabs(lethal_rad/costmap_res))+1;
 			int i = list_x_lethal.front(); //take the first element of the list
 			int j = list_y_lethal.front();
 			
@@ -392,18 +396,20 @@ class ObstacleDetectorClass
 				for (int jj=-cell_around; jj<cell_around+1; jj++) 
 				{
 				
+					if ((i+ii) < 0) ii = std::min(-i,ii);
+			        	if ((j+jj) < 0) jj = std::min(-j,jj);
 					try
 					
 					{ 
 			
 					master_grid_->setCost(i+ii, j+jj, LETHAL_OBSTACLE); //fill the cell around the obstacle
-					inf_inflation(i+ii,j+jj);
+					inf_inflation(i+ii,j+jj, master_grid_);
 					
 					}
 			
 					//continue even if exit from the grid
 			
-					catch()	
+					catch(int e)	
 		
 					{
 					//do nothing
@@ -417,23 +423,38 @@ class ObstacleDetectorClass
 		}			
 	}
 	
-	void inf_inflation(int i,int j)
+	void inf_inflation(int i,int j, costmap_2d::Costmap2D* grid)
 	{
-		unsigned int INFLATION_OBSTACLE = 200;
+		
+		float inf_rad = 0.3;
+		int cell_around = (int) floor(fabs(inf_rad/costmap_res))+1;
+		unsigned char INFLATION_OBSTACLE = 200;
 		for (int k=-cell_around; k<cell_around+1; k++) //loop around the lethal obstacle
 			{
+			
 				for (int l=-cell_around; l<cell_around+1; l++) 
 				{
-					if(master_grid_->getCost(k,l) != LETHAL_OBSTACLE) //if is a lethal do nothing
+				
+				if ((i+k) < 0) k = std::min(-i,k);
+				if ((i+l) < 0) l = std::min(-j,l);
+				unsigned char cost = grid->getCost((unsigned int)k+i,(unsigned int)l+j);
+				//std::cout << "the cost is " << cost << std::endl;
+				
+					if(cost != LETHAL_OBSTACLE) //if is a lethal do nothing
 					{
-						try master_grid_->setCost(i+k, j+l, INFLATION_OBSTACLE); //fill the cell around lethal_obs
-						catch();
+						try {
+						     grid->setCost((unsigned int)i+k, (unsigned int)j+l, INFLATION_OBSTACLE); //fill the cell around lethal_obs
+						}
+						catch(int e)
+						{
+						//do nothing
+						}
 					}
 				}
 			}
 	}	
 		
-	*/
+	
 	void cost_map_2_cloud()
 	{
 	double temp_x;
