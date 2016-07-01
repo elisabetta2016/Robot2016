@@ -8,6 +8,7 @@
 #include <pcl/point_cloud.h>
 #include <pcl/point_types.h>
 
+
 #include <pcl/filters/voxel_grid.h>
 #include <pcl/io/pcd_io.h>
 #include <pcl/point_types.h>
@@ -30,9 +31,9 @@
 #include <sensor_msgs/PointCloud2.h>
 #include "donkey_rover/Rover_Scanner.h"
 #include <geometry_msgs/Vector3.h>
-#include <nav_msgs/Path.h>
+
 #include <sensor_msgs/point_cloud_conversion.h>
-#include <sensor_msgs/Joy.h>
+
 // PCL keypoints headers
 #include <pcl/features/range_image_border_extractor.h>
 #include <pcl/keypoints/narf_keypoint.h>
@@ -50,7 +51,7 @@
 #include <tf/transform_listener.h>
 #include <Eigen/Dense> 
 
-using namespace Eigen;
+
 typedef pcl::PointXYZ PointType;
 // Range image coordinate frame 
 pcl::RangeImage::CoordinateFrame coordinate_frame = pcl::RangeImage::CAMERA_FRAME;
@@ -69,8 +70,9 @@ class ObstacleDetectorClass
 			n_=node;
 
 			//subscribers
+			//SubFromCloud_		 = n_.subscribe("cloud_in", 1, &ObstacleDetectorClass::cloud_call_back,this);
 			SubFromCloud_		 = n_.subscribe("/RL_cloud", 1, &ObstacleDetectorClass::cloud_call_back,this);
-			subFromJoystick_ 	 = n_.subscribe("joy", 1, &ObstacleDetectorClass::joyCallback,this);
+			
 			
 			// publishers
 			obstcle_pub_		  = n_.advertise<sensor_msgs::PointCloud2> ("obstacle_cloud", 1);
@@ -78,7 +80,11 @@ class ObstacleDetectorClass
 			cost_map_cl_pub_	  = n_.advertise<sensor_msgs::PointCloud2> ("costmap_cloud", 1);
 			
 			repuslive_force_pub_	  = n_.advertise<geometry_msgs::Vector3> ("force", 1);
-			path_pub_	  	  = n_.advertise<nav_msgs::Path> ("Path_sim", 1);
+			
+			//keypoint_pub_		  = n_.advertise<sensor_msgs::PointCloud2> ("keypoints", 1);
+			//ISS_keypoint_pub_	  = n_.advertise<sensor_msgs::PointCloud2> ("ISS_keypoints", 1);
+			
+			
 
 
     			
@@ -97,8 +103,8 @@ class ObstacleDetectorClass
 			costmap_y_size = 6.0; // meters
 			costmap_res = 0.2;    // meters/cell
 			
-			cell_x = (unsigned int) floor(abs(costmap_x_size/costmap_res)); //cell
-			cell_y = (unsigned int) floor(abs(costmap_y_size/costmap_res)); //cell
+			cell_x = (unsigned int) floor(abs(costmap_x_size/costmap_res));
+			cell_y = (unsigned int) floor(abs(costmap_y_size/costmap_res));
 			
 			master_grid_ = new costmap_2d::Costmap2D(cell_x,cell_y,costmap_res,-1.0,-3.0,0);
 			n = &n_;
@@ -112,6 +118,82 @@ class ObstacleDetectorClass
 	}
 	
 	
+
+	/*
+	void ketpoint_extract(pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_in)
+	{
+		ROS_WARN("NARF KEYPOINT DETECTION STARTS");
+		Eigen::Affine3f scene_sensor_pose (Eigen::Affine3f::Identity ());
+		
+                
+		float noise_level = 0.0;
+  		float min_range = 0.0f;
+  		int border_size = 1;
+  		boost::shared_ptr<pcl::RangeImage> range_image_ptr (new pcl::RangeImage);
+  		pcl::RangeImage& range_image = *range_image_ptr;
+  		angular_resolution = pcl::deg2rad (1.0f);
+  		//angular_resolution = 0.5f; 
+  		range_image.createFromPointCloud (*cloud_in, angular_resolution, pcl::deg2rad (180.0f), pcl::deg2rad (180.0f),
+                                   scene_sensor_pose, coordinate_frame, noise_level, min_range, border_size);
+  		//pcl::PointCloud<pcl::PointWithViewpoint> far_ranges;
+  		
+  		//range_image.integrateFarRanges (far_ranges);
+  		if (setUnseenToMaxRange)
+    			range_image.setUnseenToMaxRange ();
+    			
+    		pcl::RangeImageBorderExtractor range_image_border_extractor;
+  		pcl::NarfKeypoint narf_keypoint_detector (&range_image_border_extractor);
+  		narf_keypoint_detector.setRangeImage (&range_image);
+  		narf_keypoint_detector.getParameters ().support_size = support_size;
+  		
+  		//std::cout << range_image << "\n";
+  		
+  		
+  		pcl::PointCloud<int> keypoint_indices;
+  		narf_keypoint_detector.compute (keypoint_indices);
+  		std::cout << "Found "<<keypoint_indices.points.size ()<<" key points.\n";
+  		
+  		pcl::PointCloud<pcl::PointXYZ>::Ptr keypoints_ptr (new pcl::PointCloud<pcl::PointXYZ>);
+  		pcl::PointCloud<pcl::PointXYZ>& keypoints = *keypoints_ptr;
+  		keypoints.points.resize (keypoint_indices.points.size ());
+  		for (size_t i=0; i<keypoint_indices.points.size (); ++i)
+  		{
+    			keypoints.points[i].getVector3fMap () = range_image.points[keypoint_indices.points[i]].getVector3fMap ();
+    			//if (i==1) std::cout << range_image.points[keypoint_indices.points[i]].getVector3fMap () << "\n";
+    		}
+    		
+
+    		pcl::toROSMsg(keypoints,key_cloud);
+    		key_cloud.header.frame_id = "base_link";
+    		key_cloud.header.stamp = ros::Time::now();
+    		keypoint_pub_.publish(key_cloud);
+    		ROS_INFO("Keypoints Published");
+
+    		
+	}*/
+	/*
+	void ISS_keypoint(pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_in, pcl::PointCloud<pcl::PointXYZ>::Ptr keypoints_cloud)
+	{
+		ROS_WARN("ISS KEYPOINT DETECTION STARTS");
+		float support_radius = 0.08f;
+		float nms_radius = 0.04f;
+		
+		pcl::search::KdTree<pcl::PointXYZ>::Ptr tree (new pcl::search::KdTree<pcl::PointXYZ> ());
+		pcl::ISSKeypoint3D<pcl::PointXYZ, pcl::PointXYZ> iss_detector;
+		iss_detector.setSearchMethod (tree);
+		iss_detector.setSalientRadius (support_radius);
+		iss_detector.setNonMaxRadius (nms_radius);
+		iss_detector.setInputCloud (cloud_in);
+		
+		iss_detector.compute (*keypoints_cloud);
+		ROS_INFO(" Number of Keypoints found:");
+		std::cout << keypoints_cloud->points.size() << "\n";
+		pcl::toROSMsg(*keypoints_cloud,key_cloud);
+		key_cloud.header.frame_id = "base_link";
+    		key_cloud.header.stamp = ros::Time::now();
+		ISS_keypoint_pub_.publish(key_cloud);
+	}
+	*/
 	
 	void cloud_voxel_filter(pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_in, pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_out,float cube_size)
 	{
@@ -141,7 +223,9 @@ class ObstacleDetectorClass
 			repulsive_force.y +=  1/obs_proj->points[i].y;
 			
 		}
-
+		//float norm = sqrtf(powf(repulsive_force.x,2)+powf(repulsive_force.y,2));
+		//repulsive_force.x = repulsive_force.x/norm;
+  		//repulsive_force.y = repulsive_force.y/norm;
   	}
 
 	
@@ -151,9 +235,12 @@ class ObstacleDetectorClass
   	pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_pcl (new pcl::PointCloud<pcl::PointXYZ>);
   	pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_filtered_pcl (new pcl::PointCloud<pcl::PointXYZ>);
   	pcl::fromROSMsg(*cloud, *cloud_pcl);
-
+	
+ 	//cloud_voxel_filter(cloud_pcl,cloud_pcl,0.03);
+ 	//cloud_outlier_removal(cloud_pcl,cloud_pcl);
+ 	//cloud_voxel_filter(cloud_pcl,cloud_filtered_pcl,0.03);
  	*cloud_filtered_pcl = *cloud_pcl;
-
+  	//cloud_outlier_removal(cloud_filtered_pcl,cloud_filtered_pcl);
   
   
   
@@ -287,6 +374,14 @@ class ObstacleDetectorClass
 	{
 		obstacle_find_Publish(cloud);
 		
+		//pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_pcl (new pcl::PointCloud<pcl::PointXYZ>);
+		//pcl::PointCloud<pcl::PointXYZ>::Ptr key_pcl (new pcl::PointCloud<pcl::PointXYZ>);
+		//std::vector<int> mapping;
+		//pcl::removeNaNFromPointCloud(*cloud_pcl, *cloud_pcl, mapping);
+		//pcl::fromROSMsg (*cloud, *cloud_pcl);
+		//cloud_voxel_filter(cloud_pcl,cloud_pcl,0.05);
+		//ketpoint_extract(cloud_pcl);
+		//ISS_keypoint(cloud_pcl,key_pcl);
 	
 	}
 	
@@ -340,109 +435,34 @@ class ObstacleDetectorClass
 	double temp_y;
 	cost_map_cloud.clear();
 	for (size_t i=0; i < cell_x + 1; i++)
-	  {
+	{
 		for (size_t j=0; j < cell_y + 1; j++)
 		{
 			if(master_grid_->getCost(i,j) == LETHAL_OBSTACLE) 
 			{
 				master_grid_->mapToWorld(i,j,temp_x,temp_y);
-
-				for (int k = 0; k < 1; k++) // -1;2
+				//ROS_INFO("sono qua");
+				for (int k = -1; k < 2; k++)
 				{
-					for (int l = 0; l < 1; l++) // -1;2
+					for (int l = -1; l < 2; l++)
 					{
 						pcl::PointXYZ point;
 						point.z = 0.0;
 						point.x = temp_x + (float) k*costmap_res/2*0.9;
-						point.y = temp_y + (float) l*costmap_res/2*0.9;			
+						point.y = temp_y + (float) l*costmap_res/2*0.9;	
+						/*
+						std::cout << "point.x" << point.x << "\n";
+						std::cout << "point.x" << point.x << "\n";
+						std::cout << "point.x" << point.x << "\n";*/			
 						cost_map_cloud.points.push_back(point);
 					}
 				}
 			}
 		
 		}
-	   }
-	
 	}
 	
-	void joyCallback(const sensor_msgs::JoyConstPtr& joy)
-	{
-		
-  		float V_input = joy->axes[1];
-  		float Omega_input = joy->axes[2];
-  		double b = 0.8;
-  		double Ts = 3.0;
-  		Vector3f x_0;
-  		x_0(0) << 0.0, 0.0, 0.0;
-  		
-  		Vector3f x_dot_0;
-  		x_dot_0 << 0.0, 0.0, 0.0;
-  		int sample = 15;
-  		MatrixXf x;
-  		Rover_vw(V_input, Omega_input, b, Ts,x_0,x_dot_0 , sample, x);
-  	
-  	}	
 	
-	void Rover_vw(double V_input, double Omega_input, double b, double Ts,Vector3f x_0,Vector3f x_dot_0 , int sample, MatrixXf x)
-	{
-
-	
-    	MatrixXf x_dot;
-    	//MatrixXd V_in;
-    	//MatrixXd Omega_in;
-    	MatrixXf NE_dot_temp;
-    	MatrixXf Rot_temp;
-    	MatrixXf V_temp;
-        
-    	double dt = Ts / ((double)sample); 
-    	x.setZero(3,sample);
-    	x_dot.setZero(3,sample);
-    	//V_in.setOnes(1,sample);
-    	//Omega_in.setOnes(1,sample);
-   	x.col(0) = x_0;
-    	NE_dot_temp.setZero(2,sample);
-   	NE_dot_temp.col(0) = x_dot_0.topRows(2);
-    
-    	Rot_temp.setIdentity(2,2);
-    	V_temp.setZero(2,1);
-    
-    	for(size_t i=1; i < sample; i++)
-    	  {
-     		x(2,i) = x(2,i-1) + Omega_input;
-     
-     		Rot_temp(0,0) =    cos(x(2,i));
-     		Rot_temp(0,1) = -b*sin(x(2,i));
-     		Rot_temp(1,0) =    sin(x(2,i));
-     		Rot_temp(1,1) =  b*cos(x(2,i));
-     
-     		V_temp(0,0)  = V_input;
-     		V_temp(0,1)  = Omega_input;
-     		NE_dot_temp.col(i) = Rot_temp * V_temp;
-     		x_dot(0,i) = NE_dot_temp(0,i);
-     		x_dot(1,i) = NE_dot_temp(1,i);
-     		x_dot(2,i) = Omega_input;
-     
-     		x(0,i) = x(0,i-1)+x_dot(0,i)*dt;
-     		x(1,i) = x(1,i-1)+x_dot(1,i)*dt;
-        
-    	   }
-    	   
-    	   
-	nav_msgs::Path robot_path;
-	robot_path.header.stamp = ros::Time::now();
-	robot_path.header.frame_id = "laser";
-	robot_path.poses = std::vector<geometry_msgs::PoseStamped> (sample);
-	
-	for(size_t i=0; i < sample; i++)
-	  {
-		robot_path.poses[i].pose.position.x = x(0,i);
-		robot_path.poses[i].pose.position.y = x(1,i);
-		robot_path.poses[i].pose.position.z = 0.0;
-		//robot_path.poses[i].orientation = tf::createQuaternionMsgFromYaw(x(2,i));
-	  }
-	  
-	path_pub_.publish(robot_path);
-	  
 	}
 	
 	void run()
@@ -477,7 +497,7 @@ class ObstacleDetectorClass
 		
 		
 
-		Matrix4f transform_1 = Matrix4f::Identity();
+		Eigen::Matrix4f transform_1 = Eigen::Matrix4f::Identity();
 		
 		while(ros::ok())
 		{
@@ -504,7 +524,7 @@ class ObstacleDetectorClass
 			M.getRPY(roll,pitch,yaw,(unsigned int) 1);
 			curr_yaw = (float) yaw;
 			
-			
+			//ROS_INFO("CIAOOOOOO");
 			if (!first_loop)
 			{	
 				
@@ -512,7 +532,7 @@ class ObstacleDetectorClass
 				float delta_y   = (curr_y - last_y);
 				float delta_yaw = (curr_yaw - last_yaw);
 				
-
+				//ROS_ERROR("delta_x = %f, delta_y = %f, delta_yaw = %f",delta_x,delta_y,delta_yaw);
 				/*
 				| cos(yaw)  sin(yaw) 0  x|
 				|-sin(yaw)  cos(yaw) 0  y|
@@ -543,6 +563,7 @@ class ObstacleDetectorClass
 		
 			// Publishing cost_map pc
 			pcl::toROSMsg(cost_map_cloud,costmap_cl);
+		//std::cout << "   --   >   " <<cost_map_cloud.points.size() << "\n";
     			costmap_cl.header.frame_id = "laser";
     			costmap_cl.header.stamp = ros::Time::now();		
 			cost_map_cl_pub_.publish(costmap_cl);			
@@ -562,15 +583,16 @@ class ObstacleDetectorClass
 		ros::NodeHandle* n; 
 		// Subscribers
 		ros::Subscriber SubFromCloud_;
-		ros::Subscriber subFromJoystick_;
+		
 		
 		// Publishers
 		ros::Publisher obstcle_pub_;
 		ros::Publisher obstcle_proj_pub_;
 		ros::Publisher cost_map_cl_pub_;
 		ros::Publisher repuslive_force_pub_;
-		ros::Publisher path_pub_;
 		
+		//ros::Publisher keypoint_pub_;
+		//ros::Publisher ISS_keypoint_pub_;
 		geometry_msgs::Vector3 repulsive_force;
 		
 		//Class Global Variables

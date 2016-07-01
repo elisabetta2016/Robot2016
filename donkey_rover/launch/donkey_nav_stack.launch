@@ -12,11 +12,15 @@
   <param name="host" value="$(arg host)" />
   <param name="frame_id" value="base_laser" />
   </node>
+  <!--
+  <include file="$(find position_estimator)/launch/mms_rover.launch" />
+  -->
   <node pkg="joy" name="joy_node" type="joy_node" output="screen">
   </node>
   <node pkg="donkey_rover" name="rover_odom" type="rover_odom" output="screen" required="true">
         <param name="send_odom" value="true" />
         <param name="odom_3D" value="false" />
+        <param name="madgwick" value="true" />
   </node>
   
   <node type="imu_filter_node" pkg="imu_filter_madgwick" name="imu_filter_node">
@@ -26,7 +30,5 @@
     <param name="publish_tf" value="false" />
     <param name="gain" value="0.1" />
   </node>
-  
-
 </launch>
 

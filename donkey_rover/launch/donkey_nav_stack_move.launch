@@ -1,7 +1,9 @@
 <launch>
 
-  <node pkg="tf" type="static_transform_publisher" name="link2_broadcaster" args="0.493 0 0 0 0 3.1416 /base_link /laser 100" />
-  <node pkg="tf" type="static_transform_publisher" name="link3_broadcaster" args="1.85 0 0 0 0 3.1416 /base_scanner  b_link 100" />
+  <node pkg="tf" type="static_transform_publisher" name="link1_broadcaster" args="0 0 0 1.57 0 0 /Imu_link /base_link 100" />
+  <node pkg="tf" type="static_transform_publisher" name="link2_broadcaster" args="0.493 0 0 0 0 0 /base_link /laser 100" />
+
+  <node pkg="tf" type="static_transform_publisher" name="link3_broadcaster" args="1.85 0 0 0 0 0 /base_scanner  b_link 100" />
   <node pkg="tf" type="static_transform_publisher" name="link3_1_broadcaster" args="-1.97 0 0 0 0.0 0 b_link camera_link 100" />
   <node pkg="tf" type="static_transform_publisher" name="link4_broadcaster" args="0 0 0 0 0 0 camera_link openni_depth_frame  100" />
  
@@ -13,13 +15,25 @@
   </node>
   <node pkg="joy" name="joy_node" type="joy_node" output="screen">
   </node>
-  <node pkg="donkey_rover" name="rover_odom" type="rover_odom" output="screen">
+  <node pkg="donkey_rover" name="rover_odom" type="rover_odom" output="screen" required="true">
         <param name="send_odom" value="true" />
+        <param name="odom_3D" value="false" />
+        <param name="madgwick" value="true" />
   </node>
+  
+ <node type="imu_filter_node" pkg="imu_filter_madgwick" name="imu_filter_node">
+    <param name="use_mag" value="true" />
+    <param name="use_magnetic_field_msg" value="true" />
+    <param name="publish_tf" value="false" />
+    <param name="gain" value="0.1" />
+ </node>
+    
  <arg name="map_file" default="$(find donkey_rover_2dnav)/map.yaml"/>
 
-  <!-- Run the map server -->
+  <!-- Run the map server 
   <node name="map_server" pkg="map_server" type="map_server" args="$(arg map_file)" />
+  -->
+  
   <include file="$(find donkey_rover_2dnav)/move_base.launch" />
 </launch>
 

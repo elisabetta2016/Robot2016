@@ -67,16 +67,21 @@ class DonkeyRoverClass
 		}
 
   		void ImuSet(const sensor_msgs::Imu::ConstPtr& msg){
-  			Quat_attitude = msg->orientation;
+  			
   			Gyro_velocity = msg->angular_velocity;
+  			if (madgwick_)
+  				Quat_attitude = msg->orientation;
   		
   		}
 		
 		void setAttitude(const sherpa_msgs::Attitude::ConstPtr& msg){
 			euler_attitude = msg->euler;
-			euler_attitude.z = euler_attitude.z + M_PI/2;
-			//Quat_attitude = msg->quaternion;
-		
+			euler_attitude.z = euler_attitude.z; //+ M_PI/2;
+			if (!madgwick_)
+			{
+			    	Quat_attitude = msg->quaternion;
+			    	ROS_INFO_ONCE("Grande Nicola!!");
+			}
 		}
 
 		void RLcommander(const geometry_msgs::Vector3::ConstPtr& s)
@@ -595,6 +600,7 @@ class DonkeyRoverClass
   			ros::NodeHandle n("~");
    			n.param("send_odom", send_odom_, false);
    			n.param("odom_3D", odom_3D_, false);
+   			n.param("madgwick", madgwick_, true);
    			
    			//Variables
   			float x = 0.0;
@@ -805,6 +811,7 @@ class DonkeyRoverClass
         	float scannerRaw_init;
         	float scanner_hor_corrector;
         	bool first_cycle = true;
+        	bool madgwick_;
   		geometry_msgs::Vector3 euler_attitude;
   		geometry_msgs::Vector3 Gyro_velocity;
   		geometry_msgs::Quaternion Quat_attitude;

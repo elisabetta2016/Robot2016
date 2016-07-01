@@ -5,8 +5,7 @@
 		<param name="Filter_Gain_Ky" value="1"/>	
 		<param name="Filter_Gain_Kz" value="1"/>
 		<param name="Attitude_LPF_ON" value="true"/>	
-		<param name="K_LPF" value="1"/>
-		<param name="Attitude_Body_Speed_ON" value="true"/>		
+		<param name="K_LPF" value="1"/>		
 	</node> 
 
 	<node pkg="mms_rover" type="mms_rover" name="mms_rover" output="screen">

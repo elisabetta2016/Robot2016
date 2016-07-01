@@ -1,8 +1,8 @@
 <?xml version="1.0"?>
 <package>
-  <name>pcl_analyser</name>
+  <name>laser_to_pc</name>
   <version>0.0.0</version>
-  <description>The pcl_analyser package</description>
+  <description>The laser_to_pc package</description>
 
   <!-- One maintainer tag required, multiple allowed, one person per tag --> 
   <!-- Example:  -->
@@ -19,7 +19,7 @@
   <!-- Url tags are optional, but mutiple are allowed, one per tag -->
   <!-- Optional attribute type can be: website, bugtracker, or repository -->
   <!-- Example: -->
-  <!-- <url type="website">http://wiki.ros.org/pcl_analyser</url> -->
+  <!-- <url type="website">http://wiki.ros.org/laser_to_pc</url> -->
 
 
   <!-- Author tags are optional, mutiple are allowed, one per tag -->
@@ -40,20 +40,19 @@
   <!-- Use test_depend for packages you need only for testing: -->
   <!--   <test_depend>gtest</test_depend> -->
   <buildtool_depend>catkin</buildtool_depend>
-  <build_depend>pcl_conversions</build_depend>
-  <build_depend>pcl_ros</build_depend>
+  <build_depend>geometry_msgs</build_depend>
+  <build_depend>pcl</build_depend>
   <build_depend>roscpp</build_depend>
   <build_depend>sensor_msgs</build_depend>
-  <build_depend>laser_assembler</build_depend>
-  <run_depend>laser_assembler</run_depend>
-  <run_depend>pcl_conversions</run_depend>
-  <run_depend>pcl_ros</run_depend>
+  <build_depend>std_msgs</build_depend>
+  <build_depend>tf</build_depend>
+  <run_depend>geometry_msgs</run_depend>
+  <run_depend>pcl</run_depend>
   <run_depend>roscpp</run_depend>
   <run_depend>sensor_msgs</run_depend>
-  <build_depend>libpcl-all-dev</build_depend>
-  <run_depend>libpcl-all</run_depend>
-  <build_depend>costmap_2d</build_depend>
-  <run_depend>costmap_2d</run_depend>
+  <run_depend>std_msgs</run_depend>
+  <run_depend>tf</run_depend>
+
 
   <!-- The export tag contains other, unspecified, tags -->
   <export>

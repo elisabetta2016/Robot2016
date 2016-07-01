@@ -15,7 +15,10 @@
 // #define NO_HOME 10
 
 // TODO here include the message definitions
-
+const int rate = 10;
+const float DT = 0.1;// 1/rate;
+bool Attitude_Body_Speed_ON;
+bool Attitude_LPF_ON;
 bool is_GPS_present = false;
 bool is_Imu_present = false;
 bool is_Magnetometer_present = false;
@@ -37,6 +40,12 @@ const double e = 0.0816733743281685; // first eccentricity
 float R_B2ENU_11, R_B2ENU_12, R_B2ENU_13; // from body to ENU
 float R_B2ENU_21, R_B2ENU_22, R_B2ENU_23; // from body to ENU
 float R_B2ENU_31, R_B2ENU_32, R_B2ENU_33; // from body to ENU
+float hat_R_B2ENU_11, hat_R_B2ENU_12, hat_R_B2ENU_13; // from body to ENU
+float hat_R_B2ENU_21, hat_R_B2ENU_22, hat_R_B2ENU_23; // from body to ENU
+float hat_R_B2ENU_31, hat_R_B2ENU_32, hat_R_B2ENU_33; // from body to ENU
+double Prop_R_B2ENU_11, Prop_R_B2ENU_12, Prop_R_B2ENU_13;
+double Prop_R_B2ENU_21, Prop_R_B2ENU_22, Prop_R_B2ENU_23;
+double Prop_R_B2ENU_31, Prop_R_B2ENU_32, Prop_R_B2ENU_33;
 // const double b = 10; // rover reference point [m]
 double Kx; // EAST
 double Ky; // NORTH
@@ -44,6 +53,7 @@ double Kz; // UP
 double Kx_; // EAST
 double Ky_; // NORTH
 double Kz_; // UP
+double K_LPF; // Attitude Low Pass Filter G(S) = K_LPF/(S+K_LPF)
 double psi, theta, phi; // ENU psi = z, theta = y, phi = x
 double q0, q1, q2, q3; 
 // Initializazion Magnetic Field
@@ -272,7 +282,7 @@ class PosEstimNodeClass
 		
 		void PositionEstimation_Handle()
 		{ 
-			if (is_Magnetometer_present && !is_Imu_present)
+/*			if (is_Magnetometer_present && !is_Imu_present)
 			{
 				// 2D based only on the magnetometer
 				double inv_det = 1/(pow(H_E,2)+pow(H_N,2));
@@ -301,7 +311,7 @@ class PosEstimNodeClass
 
 				// ROS_INFO("POS: psi_magn [rad] = %f",psi);//*180.0/M_PI);
 				
-				outputAttitude_.euler.x = phi;
+ 				outputAttitude_.euler.x = phi;
 				outputAttitude_.euler.y = theta;
 				outputAttitude_.euler.z = psi;
 				outputAttitude_.quaternion.w = q0;
@@ -317,9 +327,9 @@ class PosEstimNodeClass
 				outputAttitude_.R31 = R_B2ENU_13;
 				outputAttitude_.R32 = R_B2ENU_23;
 				outputAttitude_.R33 = R_B2ENU_33;
-				pubAttitude_.publish(outputAttitude_);		
-			}
-			if (is_Magnetometer_present && is_Imu_present)
+				pubAttitude_.publish(outputAttitude_); 	
+			}*/
+/*			if (is_Magnetometer_present && is_Imu_present)
 			{
 			
 			// Magnetometer normalizazion
@@ -333,11 +343,11 @@ class PosEstimNodeClass
 			double a_y = -inputImu_.linear_acceleration.y/a_norm; // normalized (minus becasue the accelerometer measures -g)
 			double a_z = -inputImu_.linear_acceleration.z/a_norm; // normalized (minus becasue the accelerometer measures -g)
 
-			/* vector product s = Magnetic x Gravity (both normalized)
-			 |  i   j   k  |
-			 | h_x h_y h_z |
-			 | a_x a_y a_z |
-			*/
+			// vector product s = Magnetic x Gravity (both normalized)
+			// |  i   j   k  |
+			// | h_x h_y h_z |
+			// | a_x a_y a_z |
+			
 			double s_x =  (h_y*a_z-a_y*h_z);
 			double s_y = -(h_x*a_z-a_x*h_z);
 			double s_z =  (h_x*a_y-a_x*h_y);
@@ -346,11 +356,11 @@ class PosEstimNodeClass
 			s_y =  s_y/s_norm; // normalized
 			s_z =  s_z/s_norm; // normalized			
 
-			/* vector product m = Magnetic x s (both normalized)
-			 |  i   j   k  |
-			 | h_x h_y h_z |
-			 | s_x s_y s_z |
-			*/			
+			// vector product m = Magnetic x s (both normalized)
+			// |  i   j   k  |
+			// | h_x h_y h_z |
+			// | s_x s_y s_z |
+						
 			double m_x =  (h_y*s_z-s_y*h_z);
 			double m_y = -(h_x*s_z-s_x*h_z);
 			double m_z =  (h_x*s_y-s_x*h_y);
@@ -370,6 +380,17 @@ class PosEstimNodeClass
 			R_B2ENU_31 = H_U*h_x + S_U*s_x + M_U*m_x; 
 			R_B2ENU_32 = H_U*h_y + S_U*s_y + M_U*m_y;
 			R_B2ENU_33 = H_U*h_z + S_U*s_z + M_U*m_z; 
+			
+			hat_R_B2ENU_11 = DT*K_LPF*(R_B2ENU_11-hat_R_B2ENU_11)+hat_R_B2ENU_11;
+			hat_R_B2ENU_12 = DT*K_LPF*(R_B2ENU_12-hat_R_B2ENU_12)+hat_R_B2ENU_12;
+			hat_R_B2ENU_13 = DT*K_LPF*(R_B2ENU_13-hat_R_B2ENU_13)+hat_R_B2ENU_13;
+			hat_R_B2ENU_21 = DT*K_LPF*(R_B2ENU_21-hat_R_B2ENU_21)+hat_R_B2ENU_21;
+			hat_R_B2ENU_22 = DT*K_LPF*(R_B2ENU_22-hat_R_B2ENU_22)+hat_R_B2ENU_22;
+			hat_R_B2ENU_23 = DT*K_LPF*(R_B2ENU_23-hat_R_B2ENU_23)+hat_R_B2ENU_23;			
+			hat_R_B2ENU_31 = DT*K_LPF*(R_B2ENU_31-hat_R_B2ENU_31)+hat_R_B2ENU_31;
+			hat_R_B2ENU_32 = DT*K_LPF*(R_B2ENU_32-hat_R_B2ENU_32)+hat_R_B2ENU_32;
+			hat_R_B2ENU_33 = DT*K_LPF*(R_B2ENU_33-hat_R_B2ENU_33)+hat_R_B2ENU_33;
+			
 			
 			// rotation angles from Body to ENU = 3(z,psi) 2(y,theta) 1(x,phi)
 			psi   = atan(R_B2ENU_21/R_B2ENU_11);
@@ -407,6 +428,182 @@ class PosEstimNodeClass
 			outputAttitude_.R32 = R_B2ENU_23;
 			outputAttitude_.R33 = R_B2ENU_33;
 			pubAttitude_.publish(outputAttitude_);			
+			}*/
+			
+			if (is_Magnetometer_present)
+			{
+				if(!is_Imu_present)
+				{
+					// 2D based only on the magnetometer
+					double inv_det = 1/(pow(H_E,2)+pow(H_N,2));
+					
+					double cos_psi   = inv_det*(H_E*inputMagnetometer_.x+H_N*inputMagnetometer_.y);
+					double sin_psi   = inv_det*(H_N*inputMagnetometer_.x-H_E*inputMagnetometer_.y);
+					
+					psi   = atan2(sin_psi,cos_psi);
+					theta = 0.0;
+					phi   = 0.0;
+
+					R_B2ENU_11 = cos_psi;
+					R_B2ENU_12 = -sin_psi; 
+					R_B2ENU_13 = 0.0;
+					R_B2ENU_21 = sin_psi;
+					R_B2ENU_22 = cos_psi; 
+					R_B2ENU_23 = 0.0;
+					R_B2ENU_31 = -0.0;
+					R_B2ENU_32 = 0.0; 
+					R_B2ENU_33 = 1.0;	
+				}
+				if(is_Imu_present)
+				{
+					// Magnetometer normalizazion
+					double h_norm = sqrt(pow(inputMagnetometer_.x,2)+pow(inputMagnetometer_.y,2)+pow(inputMagnetometer_.z,2));			
+					double h_x = inputMagnetometer_.x/h_norm; // normalized
+					double h_y = inputMagnetometer_.y/h_norm; // normalized
+					double h_z = inputMagnetometer_.z/h_norm; // normalized			
+					// Accelerometer normalizazion
+					double a_norm = sqrt(pow(inputImu_.linear_acceleration.x,2)+pow(inputImu_.linear_acceleration.y,2)+pow(inputImu_.linear_acceleration.z,2));			
+					double a_x = -inputImu_.linear_acceleration.x/a_norm; // normalized (minus becasue the accelerometer measures -g)
+					double a_y = -inputImu_.linear_acceleration.y/a_norm; // normalized (minus becasue the accelerometer measures -g)
+					double a_z = -inputImu_.linear_acceleration.z/a_norm; // normalized (minus becasue the accelerometer measures -g)
+
+
+					/* vector product s = Magnetic x Gravity (both normalized)
+					 |  i   j   k  |
+					 | h_x h_y h_z |
+					 | a_x a_y a_z |
+					*/
+					double s_x =  (h_y*a_z-a_y*h_z);
+					double s_y = -(h_x*a_z-a_x*h_z);
+					double s_z =  (h_x*a_y-a_x*h_y);
+					double s_norm = sqrt(pow(s_x,2)+pow(s_y,2)+pow(s_z,2));
+					s_x =  s_x/s_norm; // normalized
+					s_y =  s_y/s_norm; // normalized
+					s_z =  s_z/s_norm; // normalized			
+
+					/* vector product m = Magnetic x s (both normalized)
+					 |  i   j   k  |
+					 | h_x h_y h_z |
+					 | s_x s_y s_z |
+					*/			
+					double m_x =  (h_y*s_z-s_y*h_z);
+					double m_y = -(h_x*s_z-s_x*h_z);
+					double m_z =  (h_x*s_y-s_x*h_y);
+					double m_norm = sqrt(pow(m_x,2)+pow(m_y,2)+pow(m_z,2));
+					m_x =  m_x/m_norm; // normalized
+					m_y =  m_y/m_norm; // normalized
+					m_z =  m_z/m_norm; // normalized
+					
+					// rotation matrix from Body to ENU
+					// R_B2ENU = [H|S|M]*[h|s|m]'
+					R_B2ENU_11 = H_E*h_x + S_E*s_x + M_East*m_x; 
+					R_B2ENU_12 = H_E*h_y + S_E*s_y + M_East*m_y;
+					R_B2ENU_13 = H_E*h_z + S_E*s_z + M_East*m_z;
+					R_B2ENU_21 = H_N*h_x + S_N*s_x + M_N*m_x; 
+					R_B2ENU_22 = H_N*h_y + S_N*s_y + M_N*m_y;
+					R_B2ENU_23 = H_N*h_z + S_N*s_z + M_N*m_z;
+					R_B2ENU_31 = H_U*h_x + S_U*s_x + M_U*m_x; 
+					R_B2ENU_32 = H_U*h_y + S_U*s_y + M_U*m_y;
+					R_B2ENU_33 = H_U*h_z + S_U*s_z + M_U*m_z; 
+				}
+				
+				// FILTER THE DCM
+				if (Attitude_LPF_ON)
+				{
+					if (Attitude_Body_Speed_ON && is_Imu_present)
+					{
+						double wg_x = inputImu_.angular_velocity.x;
+						double wg_y = inputImu_.angular_velocity.y;
+						double wg_z = inputImu_.angular_velocity.z;
+						Prop_R_B2ENU_11 =  hat_R_B2ENU_12*wg_z - hat_R_B2ENU_13*wg_y;
+						Prop_R_B2ENU_12 = -hat_R_B2ENU_11*wg_z + hat_R_B2ENU_13*wg_x;
+						Prop_R_B2ENU_13 =  hat_R_B2ENU_11*wg_y - hat_R_B2ENU_12*wg_x;
+						Prop_R_B2ENU_21 =  hat_R_B2ENU_22*wg_z - hat_R_B2ENU_23*wg_y;
+						Prop_R_B2ENU_22 = -hat_R_B2ENU_21*wg_z + hat_R_B2ENU_23*wg_x;
+						Prop_R_B2ENU_23 =  hat_R_B2ENU_21*wg_y - hat_R_B2ENU_22*wg_x;
+						Prop_R_B2ENU_31 =  hat_R_B2ENU_32*wg_z - hat_R_B2ENU_33*wg_y;
+						Prop_R_B2ENU_32 = -hat_R_B2ENU_31*wg_z + hat_R_B2ENU_33*wg_x;
+						Prop_R_B2ENU_33 =  hat_R_B2ENU_31*wg_y - hat_R_B2ENU_32*wg_x;
+					}
+					else
+					{
+						Prop_R_B2ENU_11 =  0.0;
+						Prop_R_B2ENU_12 =  0.0;
+						Prop_R_B2ENU_13 =  0.0;
+						Prop_R_B2ENU_21 =  0.0;
+						Prop_R_B2ENU_22 =  0.0;
+						Prop_R_B2ENU_23 =  0.0;
+						Prop_R_B2ENU_31 =  0.0;
+						Prop_R_B2ENU_32 =  0.0;
+						Prop_R_B2ENU_33 =  0.0;						
+					}
+					hat_R_B2ENU_11 = DT*(Prop_R_B2ENU_11+K_LPF*(R_B2ENU_11-hat_R_B2ENU_11))+hat_R_B2ENU_11;
+					hat_R_B2ENU_12 = DT*(Prop_R_B2ENU_12+K_LPF*(R_B2ENU_12-hat_R_B2ENU_12))+hat_R_B2ENU_12;
+					hat_R_B2ENU_13 = DT*(Prop_R_B2ENU_13+K_LPF*(R_B2ENU_13-hat_R_B2ENU_13))+hat_R_B2ENU_13;
+					hat_R_B2ENU_21 = DT*(Prop_R_B2ENU_21+K_LPF*(R_B2ENU_21-hat_R_B2ENU_21))+hat_R_B2ENU_21;
+					hat_R_B2ENU_22 = DT*(Prop_R_B2ENU_22+K_LPF*(R_B2ENU_22-hat_R_B2ENU_22))+hat_R_B2ENU_22;
+					hat_R_B2ENU_23 = DT*(Prop_R_B2ENU_23+K_LPF*(R_B2ENU_23-hat_R_B2ENU_23))+hat_R_B2ENU_23;			
+					hat_R_B2ENU_31 = DT*(Prop_R_B2ENU_31+K_LPF*(R_B2ENU_31-hat_R_B2ENU_31))+hat_R_B2ENU_31;
+					hat_R_B2ENU_32 = DT*(Prop_R_B2ENU_32+K_LPF*(R_B2ENU_32-hat_R_B2ENU_32))+hat_R_B2ENU_32;
+					hat_R_B2ENU_33 = DT*(Prop_R_B2ENU_33+K_LPF*(R_B2ENU_33-hat_R_B2ENU_33))+hat_R_B2ENU_33;
+
+
+					
+				}
+				if (!Attitude_LPF_ON)
+				{
+					hat_R_B2ENU_11 = R_B2ENU_11;
+					hat_R_B2ENU_12 = R_B2ENU_12;
+					hat_R_B2ENU_13 = R_B2ENU_13;
+					hat_R_B2ENU_21 = R_B2ENU_21;
+					hat_R_B2ENU_22 = R_B2ENU_22;
+					hat_R_B2ENU_23 = R_B2ENU_23;
+					hat_R_B2ENU_31 = R_B2ENU_31;
+					hat_R_B2ENU_32 = R_B2ENU_32;
+					hat_R_B2ENU_33 = R_B2ENU_33;
+				}
+				
+				// DETERMINE EULER AND QUATERNION
+				// rotation angles from Body to ENU = 3(z,psi) 2(y,theta) 1(x,phi)
+				psi   = atan(hat_R_B2ENU_21/hat_R_B2ENU_11);
+				theta = sin(-hat_R_B2ENU_31);
+				phi   = atan(hat_R_B2ENU_32/hat_R_B2ENU_33);
+				// quaternion from Body to ENU: q0=scalar, (q1,q2,q3)=vector
+				double cos_PHI = (0.5*(hat_R_B2ENU_11+hat_R_B2ENU_22+hat_R_B2ENU_33-1));
+				double PHI = acos(cos_PHI);
+				double sin_PHI = sin(PHI);
+				double sin_PHI_2 = sin(PHI/2);
+				double e1 = -(hat_R_B2ENU_23-hat_R_B2ENU_32)/(2*sin_PHI);
+				double e2 = -(hat_R_B2ENU_31-hat_R_B2ENU_13)/(2*sin_PHI);
+				double e3 = -(hat_R_B2ENU_12-hat_R_B2ENU_21)/(2*sin_PHI);
+				q0 =    cos(PHI/2); // scalar
+				q1 = e1*sin_PHI_2; // vector x
+				q2 = e2*sin_PHI_2; // vector y
+				q3 = e3*sin_PHI_2; // vector z
+				double norm_q = sqrt(pow(q0,2)+pow(q1,2)+pow(q2,2)+pow(q3,2));
+				q0 = q0/norm_q;
+				q1 = q1/norm_q;
+				q2 = q2/norm_q;
+				q3 = q3/norm_q;
+				
+				// PUBLISH THE FILTERED ATTITUDE
+				outputAttitude_.euler.x = phi;
+				outputAttitude_.euler.y = theta;
+				outputAttitude_.euler.z = psi;
+				outputAttitude_.quaternion.w = q0;
+				outputAttitude_.quaternion.x = q1;
+				outputAttitude_.quaternion.y = q2;
+				outputAttitude_.quaternion.z = q3;
+				outputAttitude_.R11 = hat_R_B2ENU_11;
+				outputAttitude_.R12 = hat_R_B2ENU_21;
+				outputAttitude_.R13 = hat_R_B2ENU_31;
+				outputAttitude_.R21 = hat_R_B2ENU_12;
+				outputAttitude_.R22 = hat_R_B2ENU_22;
+				outputAttitude_.R23 = hat_R_B2ENU_32;
+				outputAttitude_.R31 = hat_R_B2ENU_13;
+				outputAttitude_.R32 = hat_R_B2ENU_23;
+				outputAttitude_.R33 = hat_R_B2ENU_33;
+				pubAttitude_.publish(outputAttitude_);
 			}
 			
 			if (flag_init == true)
@@ -541,9 +738,15 @@ class PosEstimNodeClass
 				n.param("Filter_Gain_Kx", Kx_, 0.10);
 				n.param("Filter_Gain_Kx", Ky_, 0.10);
 				n.param("Filter_Gain_Kx", Kz_, 0.10);
+				n.param("Attitude_LPF_ON", Attitude_LPF_ON, false);
+ 				n.param("K_LPF",K_LPF,0.1);
+				n.param("Attitude_Body_Speed_ON", Attitude_Body_Speed_ON, false);
 				ROS_INFO_ONCE("POS_ESTIM: Kx = %f",Kx_);
 				ROS_INFO_ONCE("POS_ESTIM: Kx = %f",Ky_);
 				ROS_INFO_ONCE("POS_ESTIM: Kx = %f",Kz_);
+				ROS_INFO_ONCE("POS_ESTIM: Attitude_LPF_ON = %d",Attitude_LPF_ON);
+				ROS_INFO_ONCE("POS_ESTIM: K_LPF = %f",K_LPF);
+				ROS_INFO_ONCE("POS_ESTIM: Attitude_Body_Speed_ON = %d",Attitude_Body_Speed_ON);
 				PositionEstimation_Handle();
 				ros::spinOnce();
 				loop_rate.sleep();
@@ -596,9 +799,6 @@ class PosEstimNodeClass
 		v_ECEF P_ACTUAL_ECEF;
 		v_ECEF DP_ECEF;*/
 		geometry_msgs::Vector3 d_hat_P_ENU,P_ENU_GPS,P_ACTUAL_ENU,hat_P_ENU,P_HOME_ECEF,P_ACTUAL_ECEF,DP_ECEF;
-       
-		const int rate = 10;
-		const float DT = 0.1;// 1/rate;
 
 	private:
 };

@@ -1,17 +1,18 @@
 cmake_minimum_required(VERSION 2.8.3)
-project(pcl_analyser)
+project(laser_to_pc)
 
 ## Find catkin macros and libraries
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
 ## is used, also find other catkin packages
 find_package(catkin REQUIRED COMPONENTS
-  tf
+  laser_geometry
+  geometry_msgs
   pcl_conversions
   pcl_ros
   roscpp
-  sensor_msgs
-  laser_assembler
-  costmap_2d
+  sensor_msgs 
+  std_msgs
+  tf
 )
 
 ## System dependencies are found with CMake's conventions
@@ -71,7 +72,7 @@ find_package(catkin REQUIRED COMPONENTS
 ## Generate added messages and services with any dependencies listed here
 # generate_messages(
 #   DEPENDENCIES
-#   sensor_msgs
+#   geometry_msgs#   sensor_msgs#   std_msgs
 # )
 
 ################################################
@@ -105,8 +106,8 @@ find_package(catkin REQUIRED COMPONENTS
 ## DEPENDS: system dependencies of this project that dependent projects also need
 catkin_package(
 #  INCLUDE_DIRS include
-#  LIBRARIES pcl_analyser
-#  CATKIN_DEPENDS pcl_conversions pcl_ros roscpp sensor_msgs
+#  LIBRARIES laser_to_pc
+#  CATKIN_DEPENDS geometry_msgs pcl roscpp sensor_msgs std_msgs tf
 #  DEPENDS system_lib
 )
 
@@ -122,27 +123,41 @@ include_directories(
 )
 
 ## Declare a C++ library
-# add_library(pcl_analyser
-#   src/${PROJECT_NAME}/pcl_analyser.cpp
+# add_library(laser_to_pc
+#   src/${PROJECT_NAME}/laser_to_pc.cpp
 # )
 
 ## Add cmake target dependencies of the library
 ## as an example, code may need to be generated before libraries
 ## either from message generation or dynamic reconfigure
-# add_dependencies(pcl_analyser ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+# add_dependencies(laser_to_pc ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 ## Declare a C++ executable
- add_executable(pcl_analyser_node src/pcl_analyser_node.cpp)
+add_executable(laser_to_pc_node src/laser_to_pc_node.cpp)
+add_executable(pc_complete src/pc_complete.cpp)
+add_executable(object_pcd src/object_pcd.cpp)
+add_executable(find_object src/find_object.cpp)
 
 ## Add cmake target dependencies of the executable
 ## same as for the library above
- add_dependencies(pcl_analyser_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+add_dependencies(laser_to_pc_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 ## Specify libraries to link a library or executable target against
- target_link_libraries(pcl_analyser_node
+target_link_libraries(laser_to_pc_node
    ${catkin_LIBRARIES}
  )
-
+ 
+target_link_libraries(pc_complete
+   ${catkin_LIBRARIES}
+ )
+ 
+target_link_libraries(object_pcd
+   ${catkin_LIBRARIES}
+ )
+ 
+target_link_libraries(find_object
+   ${catkin_LIBRARIES}
+ )
 #############
 ## Install ##
 #############
@@ -158,7 +173,7 @@ include_directories(
 # )
 
 ## Mark executables and/or libraries for installation
-# install(TARGETS pcl_analyser pcl_analyser_node
+# install(TARGETS laser_to_pc laser_to_pc_node
 #   ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
 #   LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
 #   RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
@@ -183,7 +198,7 @@ include_directories(
 #############
 
 ## Add gtest based cpp test target and link libraries
-# catkin_add_gtest(${PROJECT_NAME}-test test/test_pcl_analyser.cpp)
+# catkin_add_gtest(${PROJECT_NAME}-test test/test_laser_to_pc.cpp)
 # if(TARGET ${PROJECT_NAME}-test)
 #   target_link_libraries(${PROJECT_NAME}-test ${PROJECT_NAME})
 # endif()

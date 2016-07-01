@@ -1,0 +1,12 @@
+<launch>
+  <node type="pc_segmentation" pkg="pcl_segmentation" name="pc_segmentation">
+    
+    <param name="scale1" type="double" value="0.2" />
+    <param name="scale2" type="double" value="0.5" />
+    <param name="threshold" type="double" value="0.7" />
+    <param name="segradius" type="double" value="0.5" />
+    <param name="topic" type="string" value="/assembled_cloud" />
+  </node>
+
+
+</launch>
