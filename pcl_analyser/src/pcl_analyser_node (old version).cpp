@@ -576,7 +576,10 @@ class ObstacleDetectorClass
 	  	
   	}
   	
- 	  	
+  	
+
+  	
+  	  	
 	void GoalCallback(const geometry_msgs::Vector3::ConstPtr& msg)
 	{
 		nav_goal(0,0) = msg->x;
@@ -815,18 +818,18 @@ class ObstacleDetectorClass
 	std::cout << Goal << std::endl;
 	
 	//Definition
-	MatrixXf x;  //patricle
-	Vector2f x_best;
-	Vector2f G;
-	MatrixXf v;  //particle_increment
+	Matrix3f x;  //patricle
+	Matrix3f x_best;
+	Matrix3f G;
+	Matrix3f v;  //particle_inc
    	
 	float G_cost = 1.0/0.0;
 	float x_best_cost = 1.0/0.0;
 	
 	//PSO params
-	float pso_inertia = 0.1;
-	float c_1 = 0.45;
-	float c_2 = 0.45;
+	float pso_inertia = 0.4;
+	float c_1 = 0.3;
+	float c_2 = 0.3;
 	
 	//Objective function params
 	float Goal_gain = 0.6;
@@ -836,33 +839,25 @@ class ObstacleDetectorClass
 	bool Once_ = false; //debug
 	
    
-        // Init particles Start
-	x.setOnes(2,particle_no);
-	x(0,0) = V_curr_c(0);   // First element set
-	x(0,1) = V_curr_c(1);
-
-	//float rand_v;
-	float rand_w;
-	for(size_t i=1;i < x.cols();i++)
-	{
-		rand_w  = ((float) (rand() % 200))/100 -1.0;
-		x(0,i)  = V_curr_c(0); //fixed linear speed
-		x(1,i)  = rand_w * V_curr_c(1);
-	}
-	v.setZero(2,x.cols());
-
-
-	// Init particle End
+        /* Particle structure
+             | V1 V2 V3 |
+             | w1 w2 w3 |
+             | D1 D2 D3 |
+        */	
+	// initializatio1n
+	x << V_curr_c,  V_curr_c,  V_curr_c,
+	       D/3   ,    D/3   ,    D/3   ;
 	       
 	ROS_INFO("Initial particle");
 	std::cout << x << "\n";
-
+	
+	v <<  -0.00, -0.00, -0.00,
+	       0.05, -0.00,  0.00,
+	       0.00,  0.00,  0.00;
 	        
 	solution_found = false;
-	G(0) = x(0,0);
-	G(1) = x(1,0);
-
-	x_best = G;
+	G = x;
+	x_best = x;
   		
   	double Ts;
   	Vector3f x_0;
@@ -894,15 +889,19 @@ class ObstacleDetectorClass
 		ROS_INFO("r_1:%f, r_2:%f", r_1,r_2);	
 		
 			//first part of trajectory: tra_0
+			//Ts = (fabs(x(0,0))+fabs(x(0,1))+fabs(x(0,2)))/3/D;
 			Ts = 3.0;
 			
-			for(size_t jj=0;jj < V_in.cols() ; jj++)
-			{
-				V_in(jj) = x(0,i);
-				Omega_in(jj) = x(1,i);
-			}
+			int sub_sample = sample/1; /// /3
 		
-			
+			for(size_t jj=0;jj < 1; jj++)  // This is for test it should be jj<3
+			{
+				for(size_t j= 0 + sub_sample*jj; j < sub_sample*(jj+1); j++)
+				{
+					V_in(j) = x(0,jj);
+					Omega_in(j) = x(1,jj);
+				}
+			}
 			/*
 			//DEBUG -show
 			if(!Once_){
@@ -924,7 +923,7 @@ class ObstacleDetectorClass
 		
 			
 			Vector3f tra_tail = tra.rightCols(tra.cols()-1);
-		ROS_WARN_STREAM_ONCE("tra length  " << tra.cols() << "   tra_tail length:  " << tra_tail.cols());
+		ROS_WARN_ONCE("tra length: %d, tra_tail length: %d", tra.cols(), tra_tail.cols());
 			tra_tail(2) = 0;
 			
 			//Calculating the cost of trajectory
@@ -945,26 +944,23 @@ class ObstacleDetectorClass
 			if (Ob_func < x_best_cost)
 			{
 				x_best_cost = Ob_func;
-				x_best(0) = x(0,i);
-				x_best(1) = x(1,i);
+				x_best = x;
 				ROS_INFO("new value for x_best_cost");	
 			}
 			if (Ob_func < G_cost)
 			{
 				G_cost = Ob_func;
-				G(0) = x(0,i);
-				G(1) = x(1,i);
+				G = x;
 				output_tra = tra;
-				if (cost.Lethal_cost < 1) solution_found = true;
+				if (!cost.collision) solution_found = true;
 				ROS_INFO("new value for G_cost");
 			}
 			if(i==0) //Reseting X_best and its cost in each iteration
 			{
-				x_best(0) = x(0,i);
-				x_best(1) = x(1,i);
+				x_best = x;
 				x_best_cost = Ob_func;
 			}	  
-			v(1,i) = pso_inertia * v(1,i) + c_1 * r_1 * (x_best(1) - x(1,i)) + c_2 * r_2 * (G(1) - x(1,i));
+			v = pso_inertia * v + c_1 * r_1 * (x_best - x) + c_2 * r_2 * (G - x);
 			
 			
 		//ROS_WARN("Speed terms");
@@ -987,7 +983,7 @@ class ObstacleDetectorClass
 		ROS_ERROR("////////");
 		std::cout << (G - x) << "\n";
 		*/	
-				 
+			x = x+v;	 
 		
 
 	
@@ -995,7 +991,6 @@ class ObstacleDetectorClass
 
 
 		}
-		x = x+v;
 		// Publishing
 			
 		robot_opt_path.header.stamp = ros::Time::now();
@@ -1010,7 +1005,7 @@ class ObstacleDetectorClass
 			robot_opt_path.poses[i].pose.position.x = tra(0,i);
 			robot_opt_path.poses[i].pose.position.y = tra(1,i);
 			robot_opt_path.poses[i].pose.position.z = 0.0;
-			
+			//robot_path.poses[i].orientation = tf::createQuaternionMsgFromYaw(x(2,i));
 		}
 	  	
 	  	path_solution_pub_.publish(robot_opt_path);
@@ -1020,7 +1015,7 @@ class ObstacleDetectorClass
 		// end pub	
 	}
     
-	//output = G;
+	output = G;
     
 	}
 	
