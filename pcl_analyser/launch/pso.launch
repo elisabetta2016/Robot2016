@@ -1,0 +1,13 @@
+<launch>
+    <node type="pcl_analyser_node" pkg="pcl_analyser" name="pcl_analyser_node" output="screen">
+    
+    	<param name="pso_inertia" type="double" value="0.3" />
+    	<param name="pso_c1" type="double" value="0.40" />
+    	<param name="pso_c2" type="double" value="0.50" />
+    	<param name="pso_speed_gain" value="20.0" />
+    	<param name="pso_goal_gain"  value="20.00" />
+    	<param name="pso_cost_gain"  value="1.00" />
+    	<param name="pso_particle_no"  value="35" />
+        <param name="pso_iteration"  value="5" />
+  </node>
+</launch>
