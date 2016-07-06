@@ -709,7 +709,7 @@ class ObstacleDetectorClass
     	x_dot_f = x_dot.rightCols(sample-1);   
     	
     	
-    	   
+    	/*   
 	nav_msgs::Path robot_path;
 	robot_path.header.stamp = ros::Time::now();
 	robot_path.header.frame_id = "laser";
@@ -723,7 +723,7 @@ class ObstacleDetectorClass
 		//robot_path.poses[i].orientation = tf::createQuaternionMsgFromYaw(x(2,i));
 	  }
 	  
-	path_pub_.publish(robot_path);
+	path_pub_.publish(robot_path);*/
 	return x;  
 	}
 	
@@ -822,14 +822,28 @@ class ObstacleDetectorClass
 	ROS_INFO("PSO Starts!... GOAL:");
 	std::cout << Goal << std::endl;
 	
+	/*       particle structure  
+	       n Particle and m piece
+	| v11 v12 ...particle N.O. ... v1n|
+	| w11 w12 ...particle N.O. ... w1n|
+	|	        ...	          |
+	|	     Piece N.O.	          | 
+	|	        ...	          |
+	| vmn vmn ...particle N.O. ... vmn|
+	| wm1 wm2 ...particle N.O. ... wmn|
+	*/
 	
 	//Definition
+	int piece_no = 3;
 	MatrixXf x;  //patricle
-	Vector2f x_best;
-	Vector2f G;
+	VectorXf x_best(2*piece_no);
+	//Vector2f x_best;
+	VectorXf G(2*piece_no);
+	//Vector2f G;
 	MatrixXf v;  //particle_increment
    	MatrixXf output_tra;
    	output_tra.setZero(3,sample);
+   	
    	
 	float G_cost = 1.0/0.0;
 	float x_best_cost = 1.0/0.0;
@@ -850,26 +864,49 @@ class ObstacleDetectorClass
 	//Objective function params
 	
 	
-	bool Once_ = false; //debug
 	
    
         // Init particles Start
-	x.setOnes(2,particle_no);
+	x.setOnes(2*piece_no,particle_no);
+	//x.setOnes(2,particle_no);
+	
+	for(size_t i=0;i < 2*piece_no ;i++)  // First element set
+	{
+	
+		x(i,0) = V_curr_c(0);
+		i++;
+		x(i,0) = V_curr_c(1);
+	}
+	/*
 	x(0,0) = V_curr_c(0);   // First element set
-	x(1,0) = V_curr_c(1);
+	x(1,0) = V_curr_c(1);*/
+	
+	
 	ROS_INFO_STREAM("V_curr_c is -------->  "  << V_curr_c);
 
 	float rand_v;
 	float rand_w;
 	for(size_t i=1;i < x.cols();i++)
 	{
+	    for(size_t j=0; j< 2*piece_no ; j++)
+	    {
+		rand_v = ((float) (rand() % 40))/100 + 0.8;
+		rand_w  = ((float) (rand() % 200))/100 -1.0;
+		x(j,i)  = rand_v * V_curr_c(0); //fixed linear speed
+		j++;
+		x(j,i)  = rand_w * V_curr_c(1);
+	    }
+	}
+	/*
+	for(size_t i=1;i < x.cols();i++)
+	{
 		rand_v = ((float) (rand() % 40))/100 + 0.8;
 		rand_w  = ((float) (rand() % 200))/100 -1.0;
 		x(0,i)  = rand_v * V_curr_c(0); //fixed linear speed
 		x(1,i)  = rand_w * V_curr_c(1);
-	}
-	v.setZero(2,x.cols());
-
+	}*/
+	v.setZero(2*piece_no,x.cols());
+	//v.setZero(2,x.cols());
 
 	// Init particle End
 	       
@@ -878,12 +915,17 @@ class ObstacleDetectorClass
 
 	        
 	solution_found = false;
-	G(0) = x(0,0);
-	G(1) = x(1,0);
-
+	
+	for(size_t i=0;i< 2*piece_no; i++)
+	{
+	G(i) = x(i,0);
+	}
+	/*G(0) = x(0,0);
+	G(1) = x(1,0);*/
+	
 	x_best = G;
   		
-  	double Ts;
+  	double Ts= 3.0;
   	Vector3f x_0;
   	x_0 << 0.0, 0.0, 0.0;
   	Vector3f x_dot_0;
@@ -914,25 +956,26 @@ class ObstacleDetectorClass
 		//ROS_INFO("r_1:%f, r_2:%f", r_1,r_2);	
 		
 			//first part of trajectory: tra_0
-			Ts = 3.0;
 			
+			int sub_sample = floor(V_in.size()/piece_no);
+			size_t row_it = 0;
+			for(size_t jj=0;jj < V_in.size() ; jj++)
+			{       //                          first_iteration    in case sample % piece_no is not 0                
+				if ( (jj%sub_sample) == 0  &&    jj != 0 &&    (sub_sample*piece_no - row_it) > 1 ) row_it = row_it+2;
+				V_in(jj)     = x(row_it,i);
+				Omega_in(jj) = x(row_it+1,i);
+			}
+			ROS_INFO_STREAM_ONCE("V_in  "  <<  V_in);
+			ROS_INFO_STREAM_ONCE("Omega_in   "  <<  Omega_in);
+			/*
 			for(size_t jj=0;jj < V_in.size() ; jj++)
 			{
 				V_in(jj) = x(0,i);
 				Omega_in(jj) = x(1,i);
-			}
-		
+			}*/
 			
 			
-			/*//DEBUG -show
-			if(!Once_){
-				std::cout << "V_in" << "\n";
-				std::cout <<  V_in  << "\n";
-				std::cout << "Omega_in" << "\n";
-				std::cout <<  Omega_in  << "\n";			
-				Once_ = true;
-			}
-			//DEBUG - end*/
+			
 		 	
 			//simulating the trajectory
 			tra = Rover_vw(V_in, Omega_in, b, Ts,x_0,x_dot_0 , sample,x_dot_f);
@@ -971,35 +1014,36 @@ class ObstacleDetectorClass
 			if (Ob_func < x_best_cost)
 			{
 				x_best_cost = Ob_func;
-				x_best(0) = x(0,i);
-				x_best(1) = x(1,i);
+				for (size_t jj=0; jj < x.rows();jj++) x_best(jj) = x(jj,i);
+				//x_best(0) = x(0,i);
+				//x_best(1) = x(1,i);
 				ROS_INFO("new value for x_best_cost");	
 			}
 			if (Ob_func < G_cost)
 			{
 				G_cost = Ob_func;
-				G(0) = x(0,i);
-				G(1) = x(1,i);
+				for (size_t jj=0; jj < x.rows();jj++) G(jj) = x(jj,i);
+				//G(0) = x(0,i);
+				//G(1) = x(1,i);
 				output_tra = tra;
 				if (cost.Lethal_cost < 1) solution_found = true;
 				ROS_WARN(" ------>  new value for G_cost");
 			}
 			if(i==0) //Reseting X_best and its cost in each iteration
 			{
-				x_best(0) = x(0,i);
-				x_best(1) = x(1,i);
+				for (size_t jj=0; jj < x.rows();jj++) x_best(jj) = x(jj,i);
+				//x_best(0) = x(0,i);
+				//x_best(1) = x(1,i);
 				x_best_cost = Ob_func;
 			}
-			v(0,i) = pso_inertia * v(0,i) + c_1 * r_1 * (x_best(0) - x(0,i)) + c_2 * r_2 * (G(0) - x(0,i));	  
-			v(1,i) = pso_inertia * v(1,i) + c_1 * r_1 * (x_best(1) - x(1,i)) + c_2 * r_2 * (G(1) - x(1,i));
 			
-
-		}
-		x = x+v;
+			for (size_t jj=0; jj < x.rows();jj++)
+				v(jj,i) = pso_inertia * v(jj,i) + c_1 * r_1 * (x_best(jj) - x(jj,i)) + c_2 * r_2 * (G(jj) - x(jj,i));
+			//v(0,i) = pso_inertia * v(0,i) + c_1 * r_1 * (x_best(0) - x(0,i)) + c_2 * r_2 * (G(0) - x(0,i));	  
+			//v(1,i) = pso_inertia * v(1,i) + c_1 * r_1 * (x_best(1) - x(1,i)) + c_2 * r_2 * (G(1) - x(1,i));
 			
-	}
-    	// Publishing
-			
+		// Publishing
+		nav_msgs::Path robot_opt_path;	
 		robot_opt_path.header.stamp = ros::Time::now();
 			
  		robot_opt_path.header.frame_id = "laser";
@@ -1009,17 +1053,35 @@ class ObstacleDetectorClass
 		for(size_t i=0; i < sample; i++)
 		{
 
-			robot_opt_path.poses[i].pose.position.x = output_tra(0,i);
-			robot_opt_path.poses[i].pose.position.y = output_tra(1,i);
+			robot_opt_path.poses[i].pose.position.x = tra(0,i);//output_tra(0,i);
+			robot_opt_path.poses[i].pose.position.y = tra(1,i);//output_tra(1,i);
 			robot_opt_path.poses[i].pose.position.z = 0.0;
-			
 		}
-	  	
-	  	path_solution_pub_.publish(robot_opt_path);
-	  	
+	  	path_pub_.publish(robot_opt_path);
+	  	ros::Duration(0.02).sleep();
 		
+		// end pub
+		}
+		x = x+v;
+	// Publishing
+	nav_msgs::Path robot_path;
+	robot_path.header.stamp = ros::Time::now();
+	robot_path.header.frame_id = "laser";
+	robot_path.poses = std::vector<geometry_msgs::PoseStamped> (sample);
+	
+	for(size_t i=0; i < sample; i++)
+	  {
+		robot_path.poses[i].pose.position.x = output_tra(0,i);
+		robot_path.poses[i].pose.position.y = output_tra(1,i);
+		robot_path.poses[i].pose.position.z = 0.0;
+	  }
+	  
+	path_solution_pub_.publish(robot_path);
 	// end pub
-	output = G;
+			
+	}
+    	
+	//output = G;
 	return output_tra;
     
 	}
@@ -1215,7 +1277,7 @@ class ObstacleDetectorClass
 		//Obstacle avoidance variables
 		Vector3f nav_goal;
 		bool goal_present;
-		nav_msgs::Path robot_opt_path;
+		
 		
 		//Path finder
 		pcl::PointCloud<pcl::PointXYZ> path_trace_pcl;
