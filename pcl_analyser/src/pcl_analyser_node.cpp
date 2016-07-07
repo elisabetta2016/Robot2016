@@ -52,6 +52,12 @@
 #include <Eigen/Dense> 
 
 #define INFLATED_OBSTACLE 200
+#define WIDTH 255 //default 
+#include <vector>
+
+using std::vector;
+typedef pcl::PointXYZ PointXYZ;
+typedef pcl::PointCloud<pcl::PointXYZ> PointCloudXYZ;
 
 using namespace Eigen;
 typedef pcl::PointXYZ PointType;
@@ -71,10 +77,14 @@ struct CELL{
 	unsigned int y;
 	unsigned char c;
 };
+struct PointIndex {
+	int i;
+	int j;
+};
 
-float Travel_cost_inc = 0.1;
-float Lethal_cost_inc = 10.0;
-float Inf_cost_inc = 1.0;
+double Travel_cost_inc = 0.0;
+double Lethal_cost_inc = 10.0;
+double Inf_cost_inc = 8.0;
 double b = 0.8;
 int sample = 15;
 
@@ -149,9 +159,10 @@ class ObstacleDetectorClass
 	{
 		
 		pcl::PointCloud<pcl::PointXYZ> fake_obs;
-
-		float X_obs = 1.6;
-		float Y_obs = -0.5;
+		
+		
+		float X_obs = 1.2;
+		float Y_obs = -0.8;
 		
 		pcl::PointXYZ point;
 		point.x = X_obs;
@@ -163,16 +174,33 @@ class ObstacleDetectorClass
 			point.y = Y_obs;
 			for(int j=0;j < 3;j++)
 			{	
-				//ROS_INFO("j = %d", j);
-				
 				
 				point.y = point.y - costmap_res;
 				point.z = 0.0;
 				fake_obs.points.push_back(point);
-				//master_grid_->setCost(i,j, LETHAL_OBSTACLE);
-				//master_grid_ros->updateBounds(0,cell_x-1,0,cell_x-1);
+				
 			}
 		}
+		
+		X_obs = 1.8;
+		Y_obs = 1.8;
+		point.x = X_obs;
+		point.y = Y_obs;
+		point.z = 0.0;
+		for(int i=0;i<3; i++)
+		{
+			point.x = point.x + costmap_res;
+			point.y = Y_obs;
+			for(int j=0;j < 3;j++)
+			{	
+				
+				point.y = point.y - costmap_res;
+				point.z = 0.0;
+				fake_obs.points.push_back(point);
+				
+			}
+		}
+		
 		cloud_to_costmap(fake_obs);
 		cost_map_2_cloud();
 	
@@ -372,7 +400,9 @@ class ObstacleDetectorClass
 		
 	
 	
-	}  	
+	}  
+	
+	lethal_inflation();	
   	// Costmap2DPublisher
   	master_grid_ros->publishCostmap();
   	
@@ -405,81 +435,88 @@ class ObstacleDetectorClass
 	
 	
 	void lethal_inflation() //fill the cell around the lethal obstacle
-	{
-	    
-		std::list<int> list_x_lethal; //create two list
-		std::list<int> list_y_lethal;
-		float lethal_rad = 0.1;
-		
-	  	
-		for (unsigned int i=0; i < cell_x ; i++) //loop in x
 		{
-			for (unsigned int j=0; j < cell_y ; j++) //loop in y
+			float lethal_rad = 0.1;
+	  		/*
+					0 1 2 3 4 5 6 7 8 ...
+				0	x
+				1	y
+			*/
+			vector< vector<int> > matrix;
+			matrix.resize(WIDTH);
+			int index = -1;
+			
+			for (unsigned int i=0; i < cell_x ; i++) //loop in x
 			{
-				if(master_grid_->getCost(i,j) == LETHAL_OBSTACLE) //find the lethal obstacle
+				for (unsigned int j=0; j < cell_y ; j++) //loop in y
 				{
-					list_x_lethal.push_back(i); //fill the list with lethal obstacles
-					list_y_lethal.push_back(j);
-				}
-			}
-		}
-		
-		//loop in the list of lethal obstacles
-		for (int k=0; k < list_x_lethal.size(); k++) //or list_y_lethal.size(), it's the same
-		{
-			int cell_around = (int) floor(fabs(lethal_rad/costmap_res))+1;
-			int i = list_x_lethal.front(); //take the first element of the list
-			int j = list_y_lethal.front();
-			
-			for (int ii=-cell_around; ii<cell_around+1; ii++) //loop around the obstacle
-			{
-				for (int jj=-cell_around; jj<cell_around+1; jj++) 
-				{
-				
-					if ((i+ii) < 0) ii = std::min(-i,ii);
-			        	if ((j+jj) < 0) jj = std::min(-j,jj);
-					try
-					
-					{ 
-			
-					master_grid_->setCost(i+ii, j+jj, LETHAL_OBSTACLE); //fill the cell around the obstacle
-					inf_inflation(i+ii,j+jj, master_grid_);
-					
-					}
-			
-					//continue even if exit from the grid
-			
-					catch(int e)	
-		
+					if(master_grid_->getCost(i,j) == LETHAL_OBSTACLE) //find the lethal obstacle
 					{
-					//do nothing
+						index++;
+						matrix[index].resize(2);
+						matrix[index][0] = i;
+						matrix[index][1] = j;
+						//list_x_lethal.push_back(i); //fill the list with lethal obstacles
+						//list_y_lethal.push_back(j);
 					}
 				}
 			}
 			
-			list_x_lethal.pop_front(); //eliminate the first element of the list 
-			list_y_lethal.pop_front();
+			//loop in the list of lethal obstacles
+			for (int k=0; k < index; k++) 
+			{
+				int cell_around = (int) floor(fabs(lethal_rad/costmap_res))+1;
+				int i = matrix[k][0]; //x
+				int j = matrix[k][1]; //y
+				
+				for (int ii=-cell_around; ii<cell_around+1; ii++) //loop around the obstacle
+				{
+					for (int jj=-cell_around; jj<cell_around+1; jj++) 
+					{
+					
+						if ((i+ii) < 0) ii = std::min(-i,ii);
+				        	if ((j+jj) < 0) jj = std::min(-j,jj);
+						try
+						
+						{ 
+				
+						master_grid_->setCost(i+ii, j+jj, LETHAL_OBSTACLE); //fill the cell around the obstacle
+						inf_inflation(i+ii,j+jj, master_grid_);
+						
+						}
+				
+						//continue even if exit from the grid
+				
+						catch(int e)	
+			
+						{
+						//do nothing
+						}
+					}
+				}
+				
+				
+			
+			}			
+		}		
 		
-		}			
-	}
-	
 	void inf_inflation(int i,int j, costmap_2d::Costmap2D* grid)
 	{
 		
 		float inf_rad = 0.3;
 		int cell_around = (int) floor(fabs(inf_rad/costmap_res))+1;
 		unsigned char INFLATION_OBSTACLE = 200;
-		for (int k=-cell_around; k<cell_around+1; k++) //loop around the lethal obstacle
+			for (int k=-cell_around; k<cell_around+1; k++) //loop around the lethal obstacle
 			{
 			
 				for (int l=-cell_around; l<cell_around+1; l++) 
 				{
-				
-				if ((i+k) < 0) k = std::min(-i,k);
-				if ((i+l) < 0) l = std::min(-j,l);
-				unsigned char cost = grid->getCost((unsigned int)k+i,(unsigned int)l+j);
-				//std::cout << "the cost is " << cost << std::endl;
-				
+					
+					if ((i+k) < 0) k = std::min(-i,k);
+					if ((i+l) < 0) l = std::min(-j,l);
+					unsigned char cost = grid->getCost((unsigned int)k+i,(unsigned int)l+j);
+					//std::cout << "the cost is " << cost << std::endl;
+					
 					if(cost != LETHAL_OBSTACLE) //if is a lethal do nothing
 					{
 						try {
@@ -1058,7 +1095,7 @@ class ObstacleDetectorClass
 			robot_opt_path.poses[i].pose.position.z = 0.0;
 		}
 	  	path_pub_.publish(robot_opt_path);
-	  	ros::Duration(0.02).sleep();
+	  	if(demo_) ros::Duration(0.02).sleep();
 		
 		// end pub
 		}
@@ -1113,6 +1150,12 @@ class ObstacleDetectorClass
 		n_pr.param("pso_particle_no", particle_no, 10);
 		n_pr.param("pso_iteration", iteration, 5);
 		
+		n_pr.param("Travel_cost_inc", Travel_cost_inc, 0.0);
+		n_pr.param("Lethal_cost_inc", Lethal_cost_inc, 10.0);
+		n_pr.param("Inflation_cost_inc", Inf_cost_inc, 3.0);
+		n_pr.param("b", b, 0.8);
+		n_pr.param("sample", sample, 15);
+		n_pr.param("demo_mode", demo_, false);
 		
 		ROS_INFO_ONCE("PSO Params: pso_inertia:%f, c1:%f, c2:%f, Number of Particle:%d, Iteration:%d",pso_inertia,c_1,c_2,particle_no,iteration);
 		ROS_INFO_ONCE("PSO cost function Params: Goal_gain:%f, path_cost_gain:%f, speed_gain:%f",Goal_gain,Cost_gain,Speed_gain);
@@ -1284,6 +1327,7 @@ class ObstacleDetectorClass
 		float path_z_inc;
 		int particle_no;
   		int iteration;
+  		bool demo_;
 		
 		
 };
