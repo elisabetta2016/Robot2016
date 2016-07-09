@@ -10,7 +10,7 @@
 //Messages
 #include <geometry_msgs/Vector3.h>
 #include <nav_msgs/Path.h>
-
+#include <nav_msgs/Odometry.h>
 
 class PathfollowerClass
 {	
@@ -19,8 +19,8 @@ class PathfollowerClass
 	PathfollowerClass(ros::NodeHandle& node)
 	{
 		n_=node;
-		SubFromPath_		= n_.subscribe("/Path_pso", 1, &ObstacleDetectorClass::pathCallback,this);
-		SubFromOdom_		= n_.subscribe("/odom",     1, &ObstacleDetectorClass::OdomCallback,this);
+		SubFromPath_		= n_.subscribe("/Path_pso", 1, &PathfollowerClass::pathCallback,this);
+		SubFromOdom_		= n_.subscribe("/odom",     1, &PathfollowerClass::OdomCallback,this);
 		
 		speed_pub_	  	  = n_.advertise<geometry_msgs::Vector3> ("Path_sim", 1);
 		
@@ -31,7 +31,7 @@ class PathfollowerClass
 		Vth = 0.0;
 		x = 0.0;
 		y = 0.0;
-		
+		sub_goal_err = 0.04;
 	}
 	
 	void pathCallback(const nav_msgs::Path::ConstPtr& msg)
@@ -39,6 +39,10 @@ class PathfollowerClass
 		ROS_INFO("OBSTACLE AVOIDANCE ACTIVATED: new path received");
 		path = *msg;
 		new_path = true;
+		path_size = path.poses.size();
+		path_counter = 0;		
+
+		
 	}
 	
 	void OdomCallback(const nav_msgs::Odometry::ConstPtr& msg)
@@ -56,26 +60,60 @@ class PathfollowerClass
 		ros::Time current_time, last_time;
 		current_time = ros::Time::now();
 		last_time = ros::Time::now();
+
 		while (ros::ok())
 		{
+			current_time = ros::Time::now();
 			dt = (current_time - last_time).toSec();
 			x += dt*Vx;
 			y += dt*Vy;
-			
+			last_time = current_time;
+			double dx,dy;
+			if(new_path)
+			{
+								
+				sub_goal_x = path.poses[path_counter].pose.position.x;
+				sub_goal_y = path.poses[path_counter].pose.position.y;
+				if(path_counter == path_size)
+				{
+					new_path = false;
+				}
+				dx = sub_goal_x - x;
+				dy = sub_goal_y - y; 
+
+				if(fabs(dx) < sub_goal_err && fabs(dy) < sub_goal_err)
+				{
+					ROS_INFO("Sub_goal Achieved!");
+					path_counter ++;
+					
+				}
+			}
 		
 		}
 		
 	}
 	
 	private:
-	
+	// Node Handler
+	ros::NodeHandle n_;
+	//Subscribers
+	ros::Subscriber SubFromPath_;
+	ros::Subscriber SubFromOdom_;
+	//Publishers
+	ros::Publisher speed_pub_;
+
 	bool new_path;	
 	double Vx;
 	double Vy;
 	double Vth;
 	double x;
 	double y;
+	double sub_goal_x;
+	double sub_goal_y;
+	double sub_goal_err;	
 	nav_msgs::Path path;
+	int path_size;
+	int path_counter;
 		
 	
 };
