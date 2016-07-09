@@ -54,7 +54,7 @@
 #define INFLATED_OBSTACLE 200
 #define WIDTH 255 //default 
 #include <vector>
-
+#include "RoverPath.h"
 using std::vector;
 typedef pcl::PointXYZ PointXYZ;
 typedef pcl::PointCloud<pcl::PointXYZ> PointCloudXYZ;
@@ -65,7 +65,7 @@ typedef pcl::PointXYZ PointType;
 pcl::RangeImage::CoordinateFrame coordinate_frame = pcl::RangeImage::CAMERA_FRAME;
 using costmap_2d::LETHAL_OBSTACLE;
 
-
+/*
 struct PATH_COST{
 	float Lethal_cost;
 	float Travel_cost;
@@ -76,7 +76,7 @@ struct CELL{
 	unsigned int x;
 	unsigned int y;
 	unsigned char c;
-};
+};*/
 struct PointIndex {
 	int i;
 	int j;
