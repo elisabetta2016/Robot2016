@@ -96,6 +96,7 @@ double c_2;
 double Goal_gain;
 double Cost_gain;
 double Speed_gain;
+double omega_x;
 
 class ObstacleDetectorClass
 {
@@ -119,7 +120,7 @@ class ObstacleDetectorClass
 			
 			repuslive_force_pub_	  = n_.advertise<geometry_msgs::Vector3> ("force", 1);
 			path_pub_	  	  = n_.advertise<nav_msgs::Path> ("Path_sim", 1);
-			path_solution_pub_        = n_.advertise<nav_msgs::Path> ("Path_pso", 1);
+			path_solution_pub_        = n_.advertise<nav_msgs::Path> ("/Path_pso", 1);
 			
 
     			
@@ -457,7 +458,7 @@ class ObstacleDetectorClass
 					}
 				}
 			}
-		ROS_WARN("obstacle ist created successfully");	
+			
 			//loop in the list of lethal obstacles
 			for (int k=0; k < index; k++) 
 			{
@@ -573,13 +574,13 @@ class ObstacleDetectorClass
 		float V_right = msg->Front_Right_Track_Speed;
 		float V_left = msg->Front_Left_Track_Speed;
 		
-		float V_in     = (V_right + V_left) / 2  ;
-		float Omega_in = (V_right - V_left) / 0.8; //to be checked
+		float V_in     = 1.0;//(V_right + V_left) / 2  ;
+		float Omega_in = 0.0;//(V_right - V_left) / 0.8; //to be checked
 		
 		
   		// inputs
 		
-  		if(V_in > 0.05)
+  		if(V_in > 0.01)
   		{
   			VectorXf V_input;
   			VectorXf Omega_input;
@@ -594,7 +595,7 @@ class ObstacleDetectorClass
   			//ROS_WARN_STREAM_ONCE("Lin Speed tra " << V_input);
   		
   		
-  			double Ts = 3.0;
+  			double Ts = 8.0;
   			Vector3f x_0;
   			x_0 << 0.0, 0.0, 0.0;
   			Vector3f x_dot_0;
@@ -834,7 +835,7 @@ class ObstacleDetectorClass
 		rand_w  = ((float) (rand() % 200))/100 -1.0;
 		x(j,i)  = rand_v * V_curr_c(0); //fixed linear speed
 		j++;
-		x(j,i)  = rand_w * V_curr_c(1);
+		x(j,i)  = rand_w * omega_x;
 	    }
 	}
 	/*
@@ -1016,7 +1017,12 @@ class ObstacleDetectorClass
 		robot_path.poses[i].pose.position.z = 0.0;
 	  }
 	  
-	path_solution_pub_.publish(robot_path);
+	if(k == iteration-1 ) 
+	{
+		path_solution_pub_.publish(robot_path);
+		ROS_WARN("Path Published");
+		
+	}
 	// end pub
 			
 	}
@@ -1056,11 +1062,12 @@ class ObstacleDetectorClass
 		n_pr.param("pso_speed_gain", Speed_gain, 0.0);
 		n_pr.param("pso_particle_no", particle_no, 10);
 		n_pr.param("pso_iteration", iteration, 5);
+		n_pr.param("omega_x", omega_x, 0.3);
 		
 		n_pr.param("Travel_cost_inc", Travel_cost_inc, 0.0);
 		n_pr.param("Lethal_cost_inc", Lethal_cost_inc, 10.0);
 		n_pr.param("Inflation_cost_inc", Inf_cost_inc, 3.0);
-		n_pr.param("b", b, 0.8);
+		n_pr.param("b", b, 0.4);
 		n_pr.param("sample", sample, 15);
 		n_pr.param("demo_mode", demo_, false);
 		
@@ -1109,6 +1116,7 @@ class ObstacleDetectorClass
 		//fill_costmap_test(); 
 		
 		
+		ros::Duration(0.4).sleep();
 		
 		while(ros::ok())
 		{

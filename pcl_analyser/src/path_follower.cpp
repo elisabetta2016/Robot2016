@@ -22,7 +22,7 @@ class PathfollowerClass
 		SubFromPath_		= n_.subscribe("/Path_pso", 1, &PathfollowerClass::pathCallback,this);
 		SubFromOdom_		= n_.subscribe("/odom",     1, &PathfollowerClass::OdomCallback,this);
 		
-		speed_pub_	  	  = n_.advertise<geometry_msgs::Vector3> ("Path_sim", 1);
+		speed_pub_	  	  = n_.advertise<geometry_msgs::Vector3> ("body_error", 1);
 		
 		//Initializer
 		new_path = false;
@@ -60,7 +60,9 @@ class PathfollowerClass
 		ros::Time current_time, last_time;
 		current_time = ros::Time::now();
 		last_time = ros::Time::now();
-
+		
+		geometry_msgs::Vector3 body_error;
+		
 		while (ros::ok())
 		{
 			current_time = ros::Time::now();
@@ -74,20 +76,28 @@ class PathfollowerClass
 								
 				sub_goal_x = path.poses[path_counter].pose.position.x;
 				sub_goal_y = path.poses[path_counter].pose.position.y;
+				//ROS_INFO("sub_goal   x:%f, y:%f", sub_goal_x,sub_goal_y);
+				body_error.x = -1*sub_goal_y;
+				body_error.y = sub_goal_x;
+				body_error.z = 0.0;
+				
 				if(path_counter == path_size)
 				{
 					new_path = false;
 				}
 				dx = sub_goal_x - x;
 				dy = sub_goal_y - y; 
-
+				//ROS_INFO("dx = %f, dy = %f", dx, dy);
 				if(fabs(dx) < sub_goal_err && fabs(dy) < sub_goal_err)
 				{
 					ROS_INFO("Sub_goal Achieved!");
 					path_counter ++;
 					
 				}
+				speed_pub_.publish(body_error);
+				
 			}
+		ros::spinOnce();
 		
 		}
 		
@@ -114,6 +124,7 @@ class PathfollowerClass
 	nav_msgs::Path path;
 	int path_size;
 	int path_counter;
+	
 		
 	
 };
