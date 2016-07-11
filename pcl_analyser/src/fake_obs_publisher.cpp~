@@ -1,0 +1,128 @@
+#include <ros/ros.h>
+#include <ros/timer.h>
+#include <math.h>
+#include <iostream>
+#include <string>
+// PCL specific includes
+#include <pcl_conversions/pcl_conversions.h>
+#include <pcl/point_cloud.h>
+#include <pcl/point_types.h>
+#include <pcl_ros/transforms.h>
+#include <pcl/PCLPointCloud2.h>
+#include <pcl/conversions.h>
+
+
+// Messages
+#include <sensor_msgs/PointCloud2.h>
+
+
+class FakeObstacleCloud
+{
+	public:
+		
+	FakeObstacleCloud(ros::NodeHandle& node)
+	{			
+		n_=node;
+		
+		obstcle_pub_ 	= n_.advertise<sensor_msgs::PointCloud2> ("RL_cloud", 1);
+		
+		// Initializers
+		costmap_res = 0.6;
+	}
+	
+	
+	
+	void run()
+	{
+		pcl::PointCloud<pcl::PointXYZ> fake_obs;
+		
+		float z_inc = 1.0;
+		
+		float X_obs = 1.2;
+		float Y_obs = 0.4;
+		
+		pcl::PointXYZ point;
+		point.x = X_obs;
+		point.y = Y_obs;
+		point.z = -0.1;
+		
+		
+		for(int i=0;i<30; i++)
+		{
+			point.x = point.x + costmap_res/30;
+			point.y = Y_obs;
+			for(int j=0;j < 30;j++)
+			{	
+				
+				point.y = point.y - costmap_res/30;
+				
+				fake_obs.points.push_back(point);
+				
+			}
+			point.z = point.z + z_inc/30;
+		}
+		
+		X_obs = 1.8;
+		Y_obs = 1.8;
+		point.x = X_obs;
+		point.y = Y_obs;
+		point.z = -0.1;
+		
+		for(int i=0;i<30; i++)
+		{
+			point.x = point.x + costmap_res/30;
+			point.y = Y_obs;
+			for(int j=0;j < 30;j++)
+			{	
+				
+				point.y = point.y - costmap_res/30;
+				
+				fake_obs.points.push_back(point);
+				
+			}
+			point.z = point.z + z_inc/30;
+		}
+		
+		sensor_msgs::PointCloud2 cloud;
+		
+		pcl::toROSMsg(fake_obs,cloud);
+		
+		cloud.header.frame_id = "odom";
+    		cloud.header.stamp = ros::Time::now();
+    		//obstcle_pub_.publish(cloud);
+    		//ROS_WARN("Fake obstacle cloud pubished!......");
+    		ros::Rate rate(2.0);
+    		while(ros::ok())
+    		{
+    			
+    			obstcle_pub_.publish(cloud);
+    			ROS_WARN_ONCE("Fake obstacle cloud pubished!......");
+			
+			rate.sleep();
+			ros::spinOnce();
+		}
+	}
+	
+	
+	protected:
+	ros::NodeHandle n_;
+	float costmap_res;
+		
+	ros::Publisher obstcle_pub_;
+	
+};
+	
+int main(int argc, char **argv)
+{
+	ros::init(argc, argv, "fake_obs_publisher");
+	ros::NodeHandle node;
+	
+	
+
+	FakeObstacleCloud object(node);
+	
+	object.run();
+	
+	return 0;
+}	
+	

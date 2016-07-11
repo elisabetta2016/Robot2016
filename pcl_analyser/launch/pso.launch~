@@ -1,13 +1,35 @@
 <launch>
     <node type="pcl_analyser_node" pkg="pcl_analyser" name="pcl_analyser_node" output="screen">
     
+    	<param name="costmap_res" type="double" value="0.1" />
+    	<param name="LETHAL_radius" type="double" value="0.1" />
+    	<param name="INFLATION_radius" type="double" value="0.3" />
+    	
     	<param name="pso_inertia" type="double" value="0.3" />
     	<param name="pso_c1" type="double" value="0.40" />
     	<param name="pso_c2" type="double" value="0.50" />
     	<param name="pso_speed_gain" value="20.0" />
-    	<param name="pso_goal_gain"  value="1.00" />
+    	<param name="pso_goal_gain"  value="20.00" />
     	<param name="pso_cost_gain"  value="1.00" />
     	<param name="pso_particle_no"  value="35" />
         <param name="pso_iteration"  value="5" />
+        <param name="omega_x"  value="0.3" />
+        
+        <param name="Travel_cost_inc"  value="0.0" />
+        <param name="Lethal_cost_inc"  value="10.0" />
+        <param name="Inflation_cost_inc"  value="3.0" />
+        <param name="b"  value="0.4" />
+        <param name="sample"  value="15" />
+        <param name="demo_mode"  value="false" />
+        
   </node>
+  <!--
+  <node type="path_follower" pkg="pcl_analyser" name="path_follower" output="screen"/>
+   -->
+  <node type="follow.py" pkg="donkey_rover" name="follow" output="screen">
+  	<param name="distance_b"  value="0.4" />
+  	<param name="Controller_Gain"  value="4.0" />
+  	<param name="Tracking_precision"  value="0.05" />
+  </node>
+ 
 </launch>

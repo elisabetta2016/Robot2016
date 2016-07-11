@@ -33,7 +33,7 @@
 #include <geometry_msgs/Vector3.h>
 #include <nav_msgs/Path.h>
 #include <sensor_msgs/point_cloud_conversion.h>
-#include <sensor_msgs/Joy.h>
+
 // PCL keypoints headers
 #include <pcl/features/range_image_border_extractor.h>
 #include <pcl/keypoints/narf_keypoint.h>
@@ -54,10 +54,10 @@
 #define INFLATED_OBSTACLE 200
 #define WIDTH 255 //default 
 #include <vector>
-#include "RoverPath.h"
+
 using std::vector;
 typedef pcl::PointXYZ PointXYZ;
-typedef pcl::PointCloud<pcl::PointXYZ> PointCloudXYZ;
+
 
 using namespace Eigen;
 typedef pcl::PointXYZ PointType;
@@ -65,7 +65,7 @@ typedef pcl::PointXYZ PointType;
 pcl::RangeImage::CoordinateFrame coordinate_frame = pcl::RangeImage::CAMERA_FRAME;
 using costmap_2d::LETHAL_OBSTACLE;
 
-/*
+
 struct PATH_COST{
 	float Lethal_cost;
 	float Travel_cost;
@@ -76,12 +76,13 @@ struct CELL{
 	unsigned int x;
 	unsigned int y;
 	unsigned char c;
-};*/
+};
 struct PointIndex {
 	int i;
 	int j;
 };
-
+double lethal_rad = 0.1;
+double inf_rad = 0.3;
 double Travel_cost_inc = 0.0;
 double Lethal_cost_inc = 10.0;
 double Inf_cost_inc = 8.0;
@@ -95,6 +96,7 @@ double c_2;
 double Goal_gain;
 double Cost_gain;
 double Speed_gain;
+double omega_x;
 
 class ObstacleDetectorClass
 {
@@ -106,8 +108,8 @@ class ObstacleDetectorClass
 
 			//subscribers
 			SubFromCloud_		 = n_.subscribe("/RL_cloud", 1, &ObstacleDetectorClass::cloud_call_back,this);
-			subFromJoystick_ 	 = n_.subscribe("joy", 1, &ObstacleDetectorClass::joyCallback,this);
-			subFromTrackSpeed_	 = n_.subscribe("/RoverTrackSpeedZZZZzzz", 1, &ObstacleDetectorClass::TrackCallback,this);
+			
+			subFromTrackSpeed_	 = n_.subscribe("/RoverTrackSpeed", 1, &ObstacleDetectorClass::TrackCallback,this);
 			subFromGoal_		 = n_.subscribe("/goal", 1, &ObstacleDetectorClass::GoalCallback,this);
 			
 			// publishers
@@ -118,7 +120,7 @@ class ObstacleDetectorClass
 			
 			repuslive_force_pub_	  = n_.advertise<geometry_msgs::Vector3> ("force", 1);
 			path_pub_	  	  = n_.advertise<nav_msgs::Path> ("Path_sim", 1);
-			path_solution_pub_        = n_.advertise<nav_msgs::Path> ("Path_pso", 1);
+			path_solution_pub_        = n_.advertise<nav_msgs::Path> ("/Path_pso", 1);
 			
 
     			
@@ -132,21 +134,7 @@ class ObstacleDetectorClass
 			repulsive_force.y = 0.0;
 			repulsive_force.z = 0.0;
 			
-			//costmap params
-			costmap_x_size = 6.0; // meters
-			costmap_y_size = 6.0; // meters
-			costmap_res = 0.2;    // meters/cell
 			
-			cell_x = (unsigned int) floor(abs(costmap_x_size/costmap_res)); //cell
-			cell_y = (unsigned int) floor(abs(costmap_y_size/costmap_res)); //cell
-			
-			master_grid_ = new costmap_2d::Costmap2D(cell_x,cell_y,costmap_res,-1.0,-3.0,0);
-			n = &n_;
-    			
-    			global_frame = "laser";
-			topic_name = "/global_costmap";
-			
-			master_grid_ros = new costmap_2d::Costmap2DPublisher(n,master_grid_,global_frame,topic_name,false);
 			
 			//obstacle avoidance params
 			goal_present = false;
@@ -154,7 +142,7 @@ class ObstacleDetectorClass
 			
     			
 	}
-
+	/*
 	void fill_costmap_test()
 	{
 		
@@ -205,7 +193,7 @@ class ObstacleDetectorClass
 		cost_map_2_cloud();
 	
 	
-	}
+	}*/
 
 	void cloud_voxel_filter(pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_in, pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_out,float cube_size)
 	{
@@ -341,9 +329,9 @@ class ObstacleDetectorClass
     	cloud_obstacle_projected.header.stamp = ros::Time::now();		
 	obstcle_proj_pub_.publish(cloud_obstacle_projected);
 	
-	compute_repulsive_force(obs_projected);
+	//compute_repulsive_force(obs_projected);
 	
-	cloud_to_costmap(obs_projected);
+	cloud_to_costmap(obstacle_pcl);
 	cost_map_2_cloud();
 	
 	repuslive_force_pub_.publish(repulsive_force);
@@ -391,11 +379,15 @@ class ObstacleDetectorClass
 	int my;
 
     	master_grid_->resetMap(0,0,cell_x-1,cell_y-1);
+    
 	for (size_t i = 0; i < obs_2d->points.size (); ++i)
 	{
 	
 		master_grid_->worldToMapEnforceBounds((double) obs_2d->points[i].x,(double) obs_2d->points[i].y,mx,my);
 		master_grid_ros->updateBounds(0,cell_x-1,0,cell_x-1);
+		
+		
+		
 		master_grid_->setCost(mx,my, LETHAL_OBSTACLE);
 		
 	
@@ -408,25 +400,30 @@ class ObstacleDetectorClass
   	
 	}
 	
-	void cloud_to_costmap(pcl::PointCloud<pcl::PointXYZ> obs_2d)
+	void cloud_to_costmap(pcl::PointCloud<pcl::PointXYZI> obs_2d)
 	{
 	
 	int mx;
 	int my;
 
     	master_grid_->resetMap(0,0,cell_x-1,cell_y-1);
+    	unsigned char cost;
 	for (size_t i = 0; i < obs_2d.points.size (); ++i)
 	{
 	
 		master_grid_->worldToMapEnforceBounds((double) obs_2d.points[i].x,(double) obs_2d.points[i].y,mx,my);
 		master_grid_ros->updateBounds(0,cell_x-1,0,cell_x-1);
-		master_grid_->setCost(mx,my, LETHAL_OBSTACLE);
+		
+		if (obs_2d.points[i].intensity == 200) cost = INFLATED_OBSTACLE;
+		else cost = LETHAL_OBSTACLE;
+		
+		master_grid_->setCost(mx,my, cost);
 		
 	
 	
 	} 
 	
-	lethal_inflation();
+	
   	// Costmap2DPublisher
   	
   	master_grid_ros->publishCostmap();
@@ -436,7 +433,7 @@ class ObstacleDetectorClass
 	
 	void lethal_inflation() //fill the cell around the lethal obstacle
 		{
-			float lethal_rad = 0.1;
+			
 	  		/*
 					0 1 2 3 4 5 6 7 8 ...
 				0	x
@@ -503,7 +500,7 @@ class ObstacleDetectorClass
 	void inf_inflation(int i,int j, costmap_2d::Costmap2D* grid)
 	{
 		
-		float inf_rad = 0.3;
+		
 		int cell_around = (int) floor(fabs(inf_rad/costmap_res))+1;
 		unsigned char INFLATION_OBSTACLE = 200;
 			for (int k=-cell_around; k<cell_around+1; k++) //loop around the lethal obstacle
@@ -541,21 +538,19 @@ class ObstacleDetectorClass
 	  {
 		for (size_t j=0; j < cell_y + 1; j++)
 		{
-			if(master_grid_->getCost(i,j) == LETHAL_OBSTACLE) 
+			unsigned char cost = master_grid_->getCost(i,j);
+			if(cost == LETHAL_OBSTACLE || cost == INFLATED_OBSTACLE) 
 			{
 				master_grid_->mapToWorld(i,j,temp_x,temp_y);
 
-				for (int k = 0; k < 1; k++) // -1;2
-				{
-					for (int l = 0; l < 1; l++) // -1;2
-					{
-						pcl::PointXYZ point;
-						point.z = 0.0;
-						point.x = temp_x + (float) k*costmap_res/2*0.9;
-						point.y = temp_y + (float) l*costmap_res/2*0.9;			
-						cost_map_cloud.points.push_back(point);
-					}
-				}
+				
+				pcl::PointXYZI point;
+				point.z = 0.0;
+				point.x = temp_x;
+				point.y = temp_y;
+				point.intensity = (float) cost; 			
+				cost_map_cloud.points.push_back(point);
+				
 			}
 		
 		}
@@ -563,61 +558,6 @@ class ObstacleDetectorClass
 	
 	}
 	
-	void joyCallback(const sensor_msgs::JoyConstPtr& joy)
-	{
-		// inputs
-  		float V_in = joy->axes[1];
-  		float Omega_in = joy->axes[2];
-  		VectorXf V_input;
-  		VectorXf Omega_input;
-  		
-  		V_input.setOnes(sample);
-  		Omega_input.setOnes(sample);
-  		V_input = V_in * V_input;
-  		Omega_input = Omega_in * Omega_input;
-  		double Ts = 3.0;
-  		Vector3f x_0;
-  		x_0 << 0.0, 0.0, 0.0;
-  		Vector3f x_dot_0;
-  		x_dot_0 << 0.0, 0.0, 0.0;
-  		
-  		//outputs
-  		Vector3f x_dot_f;
-  		MatrixXf x;
-  		x.setZero(3,sample);
-  		
-  		//invoke
-  		x = Rover_vw(V_input, Omega_input, b, Ts,x_0,x_dot_0 , sample, x_dot_f);
-  	//ROS_INFO("trajectory length:%d   x_mid:%f", x.cols(), x(0,sample-8));
-  	
-  	//std::cout << x.cols() << "\n";
-  		PATH_COST cost = Cost_of_path(x, master_grid_);
-  		//ROS_WARN("lethal cost:%f, collision:%d", cost.Lethal_cost,cost.collision);
-  		
-  		if (cost.collision)
-  		{
-  		// some logic to be implemented and the best path to be find by the method
-  			if (!goal_present)
-  			{
-  				nav_goal(0) = x(0,sample-2);
-  				nav_goal(1) = x(1,sample-2);
-  				nav_goal(2) = 0.0;
-  			}
-  			float D = 2.0;
-  			size_t particle_no = 5;
-  			size_t iteration = 3;
-  			Matrix3f output;
-  			MatrixXf output_tra;
-  			bool solution_found;
-  			if (!pso_analyse)
-  			{
-  				//PSO_path_finder(nav_goal, D, V_in, particle_no, iteration, output, output_tra, solution_found);
-				pso_analyse = true;  			
-  			}
-  			
-  		}		
-	  	
-  	}
   	
  	  	
 	void GoalCallback(const geometry_msgs::Vector3::ConstPtr& msg)
@@ -627,36 +567,87 @@ class ObstacleDetectorClass
 		nav_goal(0,2) = 0.0; 
 		goal_present = true; 
 	}
+	
 	void TrackCallback(const donkey_rover::Rover_Track_Speed::ConstPtr& msg)
 	{
-		float V_in = (msg->Front_Right_Track_Speed + msg->Front_Right_Track_Speed)/2;
-		float Omega_in = (msg->Front_Right_Track_Speed - msg->Front_Right_Track_Speed)/0.8; //to be checked
-  		VectorXf V_input;
-  		VectorXf Omega_input;
-  		//int sample = 15;
-  		V_input.setOnes(sample);
-  		Omega_input.setOnes(sample);
-  		V_input = V_in * V_input;
-  		Omega_input = Omega_in * Omega_input;
-  		double Ts = 3.0;
-  		Vector3f x_0;
-  		x_0 << 0.0, 0.0, 0.0;
-  		Vector3f x_dot_0;
-  		x_dot_0 << 0.0, 0.0, 0.0;
-  		
-  		//outputs
-  		Vector3f x_dot_f;
-  		MatrixXf x;
-  		//invoke
-  		//Rover_vw(V_input, Omega_input, b, Ts,x_0,x_dot_0 , sample, x, x_dot_f);
-  		PATH_COST cost = Cost_of_path(x, master_grid_);
-  		if (cost.collision)
+		
+		float V_right = msg->Front_Right_Track_Speed;
+		float V_left = msg->Front_Left_Track_Speed;
+		
+		float V_in     = 1.0;//(V_right + V_left) / 2  ;
+		float Omega_in = 0.0;//(V_right - V_left) / 0.8; //to be checked
+		
+		
+  		// inputs
+		
+  		if(V_in > 0.01)
   		{
-  		// some logic to be implemented and the best path to be find by the method
+  			VectorXf V_input;
+  			VectorXf Omega_input;
+  			Vector2f V_curr_c;
+  			V_curr_c(0) = V_in;
+  			V_curr_c(1) = Omega_in;
   		
-  		}		
+  			V_input.setOnes(sample);
+  			Omega_input.setOnes(sample);
+  			V_input = V_in * V_input;
+  			Omega_input = Omega_in * Omega_input;
+  			//ROS_WARN_STREAM_ONCE("Lin Speed tra " << V_input);
+  		
+  		
+  			double Ts = 8.0;
+  			Vector3f x_0;
+  			x_0 << 0.0, 0.0, 0.0;
+  			Vector3f x_dot_0;
+  			x_dot_0 << 0.0, 0.0, 0.0;
+  		
+  			//outputs
+  			Vector3f x_dot_f;
+  			MatrixXf x;
+  			x.setZero(3,sample);
+  		
+  			//invoke
+  		//ROS_INFO(" ---- >> V_in: %f, Omega_in:%f",V_in,Omega_in );
+  		
+  		
+  			x = Rover_vw(V_input, Omega_input, b, Ts,x_0,x_dot_0 , sample, x_dot_f);
+  			ROS_WARN_STREAM_ONCE("trajectory is " << x);
+  		//ROS_INFO("trajectory length:%d   x_mid:%f", x.cols(), x(0,sample-8));
+  	
+  		//std::cout << x.cols() << "\n";
+  		
+  			PATH_COST cost = Cost_of_path(x, master_grid_);
+  			ROS_WARN_ONCE("lethal cost = %f",cost.Lethal_cost);
+  		//ROS_WARN("lethal cost:%f, collision:%d", cost.Lethal_cost,cost.collision);
+  		
+  			if (cost.collision || (cost.Lethal_cost > 0.0))
+  			{
+  		// some logic to be implemented and the best path to be find by the method
+  				if (!goal_present)
+  				{
+  					//ROS_INFO("trajectory");
+  					//std::cout << x << std::endl;
+  					nav_goal(0) = x(0,x.cols()-1);
+  					nav_goal(1) = x(1,x.cols()-1);
+  					nav_goal(2) = 0.0;
+  				}
+  				float D = 2.0;
+  			
+  				Vector2f output;
+  				MatrixXf output_tra;
+  				bool solution_found;
+  				if (!pso_analyse)
+  				{
+  					ROS_WARN(" ---- >> V_in: %f, Omega_in:%f",V_in,Omega_in );
+  					output_tra = PSO_path_finder(nav_goal, D, V_curr_c, particle_no, iteration, output, solution_found);
+					pso_analyse = true;  			
+  				}
+  			
+  			}		
 	
+		}
 	}
+	
 	  	
   		
 	PATH_COST Cost_of_path(MatrixXf path, costmap_2d::Costmap2D* grid)
@@ -673,6 +664,8 @@ class ObstacleDetectorClass
 	
 	for(size_t i=0; i < path.cols(); i++)
 	{
+		unsigned int mx;
+		unsigned int my;
 		grid->worldToMap((double) path(0,i),(double) path(1,i),curr_cell.x,curr_cell.y);
 		//debug
 	     //ROS_WARN("cell x:%d cell y:%d",curr_cell.x,curr_cell.y);
@@ -711,10 +704,9 @@ class ObstacleDetectorClass
     	MatrixXf V_temp;
         
     	double dt = Ts / ((double)sample); 
-    	//x.setZero(3,sample);
+    	
     	x_dot.setZero(3,sample);
-    	//V_in.setOnes(1,sample);
-    	//Omega_in.setOnes(1,sample);
+    	
    	x.col(0) = x_0;
     	NE_dot_temp.setZero(2,sample);
    	NE_dot_temp.col(0) = x_dot_0.topRows(2);
@@ -746,21 +738,6 @@ class ObstacleDetectorClass
     	x_dot_f = x_dot.rightCols(sample-1);   
     	
     	
-    	/*   
-	nav_msgs::Path robot_path;
-	robot_path.header.stamp = ros::Time::now();
-	robot_path.header.frame_id = "laser";
-	robot_path.poses = std::vector<geometry_msgs::PoseStamped> (sample);
-	
-	for(size_t i=0; i < sample; i++)
-	  {
-		robot_path.poses[i].pose.position.x = x(0,i);
-		robot_path.poses[i].pose.position.y = x(1,i);
-		robot_path.poses[i].pose.position.z = 0.0;
-		//robot_path.poses[i].orientation = tf::createQuaternionMsgFromYaw(x(2,i));
-	  }
-	  
-	path_pub_.publish(robot_path);*/
 	return x;  
 	}
 	
@@ -779,79 +756,6 @@ class ObstacleDetectorClass
 		}
 		
 	}
-	
-	void testCallBack()
-	{
-		// inputs
-		ROS_INFO_ONCE("Test Start");
-		
-  		float V_in = 1.0;
-  		float Omega_in = -0.05;
-  		VectorXf V_input;
-  		VectorXf Omega_input;
-  		Vector2f V_curr_c;
-  		V_curr_c(0) = V_in;
-  		V_curr_c(1) = Omega_in;
-  		
-  		V_input.setOnes(sample);
-  		Omega_input.setOnes(sample);
-  		V_input = V_in * V_input;
-  		Omega_input = Omega_in * Omega_input;
-  		//ROS_WARN_STREAM_ONCE("Lin Speed tra " << V_input);
-  		/*
-  		std::cout << "Lin Speed tra" << "\n";
-  		std::cout << V_input << "\n";
-  		std::cout << "W Speed tra" << "\n";
-  		std::cout << Omega_input << "\n";
-  		*/
-  		
-  		double Ts = 3.0;
-  		Vector3f x_0;
-  		x_0 << 0.0, 0.0, 0.0;
-  		Vector3f x_dot_0;
-  		x_dot_0 << 0.0, 0.0, 0.0;
-  		
-  		//outputs
-  		Vector3f x_dot_f;
-  		MatrixXf x;
-  		x.setZero(3,sample);
-  		
-  		//invoke
-  		x = Rover_vw(V_input, Omega_input, b, Ts,x_0,x_dot_0 , sample, x_dot_f);
-  		ROS_WARN_STREAM_ONCE("trajectory is " << x);
-  	//ROS_INFO("trajectory length:%d   x_mid:%f", x.cols(), x(0,sample-8));
-  	
-  	//std::cout << x.cols() << "\n";
-  		PATH_COST cost = Cost_of_path(x, master_grid_);
-  		ROS_WARN_ONCE("lethal cost = %f",cost.Lethal_cost);
-  		//ROS_WARN("lethal cost:%f, collision:%d", cost.Lethal_cost,cost.collision);
-  		
-  		if (cost.collision || (cost.Lethal_cost > 0.0))
-  		{
-  		// some logic to be implemented and the best path to be find by the method
-  			if (!goal_present)
-  			{
-  				//ROS_INFO("trajectory");
-  				//std::cout << x << std::endl;
-  				nav_goal(0) = x(0,x.cols()-1);
-  				nav_goal(1) = x(1,x.cols()-1);
-  				nav_goal(2) = 0.0;
-  			}
-  			float D = 2.0;
-  			
-  			Vector2f output;
-  			MatrixXf output_tra;
-  			bool solution_found;
-  			if (!pso_analyse)
-  			{
-  				output_tra = PSO_path_finder(nav_goal, D, V_curr_c, particle_no, iteration, output, solution_found);
-				pso_analyse = true;  			
-  			}
-  			
-  		}		
-	  	
-  	}
-  	
   		
 	
 	MatrixXf PSO_path_finder(Vector3f Goal,float D,Vector2f V_curr_c,int particle_no,int iteration,Vector2f output, bool solution_found)
@@ -931,7 +835,7 @@ class ObstacleDetectorClass
 		rand_w  = ((float) (rand() % 200))/100 -1.0;
 		x(j,i)  = rand_v * V_curr_c(0); //fixed linear speed
 		j++;
-		x(j,i)  = rand_w * V_curr_c(1);
+		x(j,i)  = rand_w * omega_x;
 	    }
 	}
 	/*
@@ -947,8 +851,8 @@ class ObstacleDetectorClass
 
 	// Init particle End
 	       
-	ROS_INFO("Initial particle");
-	std::cout << x << "\n";
+	if(demo_) ROS_INFO("Initial particle");
+	if(demo_) std::cout << x << "\n";
 
 	        
 	solution_found = false;
@@ -1002,8 +906,8 @@ class ObstacleDetectorClass
 				V_in(jj)     = x(row_it,i);
 				Omega_in(jj) = x(row_it+1,i);
 			}
-			ROS_INFO_STREAM_ONCE("V_in  "  <<  V_in);
-			ROS_INFO_STREAM_ONCE("Omega_in   "  <<  Omega_in);
+			if(demo_) ROS_INFO_STREAM_ONCE("V_in  "  <<  V_in);
+			if(demo_) ROS_INFO_STREAM_ONCE("Omega_in   "  <<  Omega_in);
 			/*
 			for(size_t jj=0;jj < V_in.size() ; jj++)
 			{
@@ -1027,13 +931,13 @@ class ObstacleDetectorClass
 			tra_tail(0) = tra(0,tra.cols()-1);
 			tra_tail(1) = tra(1,tra.cols()-1);
 			tra_tail(2) = 0;
-		ROS_WARN_STREAM_ONCE("tra length  " << tra.cols() << "   tra_tail :  " << tra_tail);
+		if(demo_) ROS_WARN_STREAM_ONCE("tra length  " << tra.cols() << "   tra_tail :  " << tra_tail);
 			
 			
 			//Calculating the cost of trajectory
 			PATH_COST cost = Cost_of_path(tra, master_grid_);
 			
-		ROS_INFO_ONCE("cost of the path is %f",cost.Lethal_cost);
+		if(demo_) ROS_INFO_ONCE("cost of the path is %f",cost.Lethal_cost);
 			
 			float prop_speed = fabs(x(0,i));
 			
@@ -1044,9 +948,9 @@ class ObstacleDetectorClass
 			
 			float Ob_func = Goal_gain *Ob_func_1 + Cost_gain *Ob_func_2 + Speed_gain * Ob_func_3;
 				      
-		ROS_ERROR("goal distance: %f, path cost: %f, speed different:%f",Ob_func_1,Ob_func_2,Ob_func_3);
-		ROS_INFO("LETHAL COST: %f",cost.Lethal_cost);		      
-		ROS_INFO("Ob_fun: %f",Ob_func);
+		if(demo_) ROS_ERROR("goal distance: %f, path cost: %f, speed different:%f",Ob_func_1,Ob_func_2,Ob_func_3);
+		if(demo_) ROS_INFO("LETHAL COST: %f",cost.Lethal_cost);		      
+		if(demo_) ROS_INFO("Ob_fun: %f",Ob_func);
 				      
 			if (Ob_func < x_best_cost)
 			{
@@ -1113,7 +1017,12 @@ class ObstacleDetectorClass
 		robot_path.poses[i].pose.position.z = 0.0;
 	  }
 	  
-	path_solution_pub_.publish(robot_path);
+	if(k == iteration-1 ) 
+	{
+		path_solution_pub_.publish(robot_path);
+		ROS_WARN("Path Published");
+		
+	}
 	// end pub
 			
 	}
@@ -1132,7 +1041,7 @@ class ObstacleDetectorClass
 		
 		
 		ros::NodeHandle n_pr("~");
-		
+	
 		n_pr.param("normal_threshold", normal_threshold, normal_threshold_default);
 		n_pr.param("height_threshold", height_threshold, height_threshold_default);
 		n_pr.param("height_max", height_max,height_max_default);
@@ -1140,6 +1049,10 @@ class ObstacleDetectorClass
 		if (normal_threshold != normal_threshold_default) ROS_INFO_ONCE("normal threshold is changed to %f", normal_threshold);
 		if (height_threshold != height_threshold_default) ROS_INFO_ONCE("height threshold is changed to %f", height_threshold);
 		if (height_max       != height_max_default)       ROS_INFO_ONCE("height threshold is changed to %f", height_max);
+		
+		n_pr.param("costmap_res", costmap_res, 0.2);
+		n_pr.param("LETHAL_radius", lethal_rad, 0.1);
+		n_pr.param("INFLATION_radius", inf_rad, 0.3);
 		
 		n_pr.param("pso_inertia", pso_inertia, 0.1);
 		n_pr.param("pso_c1", c_1, 0.45);
@@ -1149,19 +1062,41 @@ class ObstacleDetectorClass
 		n_pr.param("pso_speed_gain", Speed_gain, 0.0);
 		n_pr.param("pso_particle_no", particle_no, 10);
 		n_pr.param("pso_iteration", iteration, 5);
+		n_pr.param("omega_x", omega_x, 0.3);
 		
 		n_pr.param("Travel_cost_inc", Travel_cost_inc, 0.0);
 		n_pr.param("Lethal_cost_inc", Lethal_cost_inc, 10.0);
 		n_pr.param("Inflation_cost_inc", Inf_cost_inc, 3.0);
-		n_pr.param("b", b, 0.8);
+		n_pr.param("b", b, 0.4);
 		n_pr.param("sample", sample, 15);
 		n_pr.param("demo_mode", demo_, false);
 		
 		ROS_INFO_ONCE("PSO Params: pso_inertia:%f, c1:%f, c2:%f, Number of Particle:%d, Iteration:%d",pso_inertia,c_1,c_2,particle_no,iteration);
 		ROS_INFO_ONCE("PSO cost function Params: Goal_gain:%f, path_cost_gain:%f, speed_gain:%f",Goal_gain,Cost_gain,Speed_gain);
-		
+	
 		ros::Rate rate(10.0);
 		tf::TransformListener listener;
+		
+		
+		//costmap params
+		
+			costmap_x_size = 6.0; // meters
+			costmap_y_size = 6.0; // meters
+			//costmap_res = 0.2;    // meters/cell
+			
+			cell_x = (unsigned int) floor(abs(costmap_x_size/costmap_res)); //cell
+			cell_y = (unsigned int) floor(abs(costmap_y_size/costmap_res)); //cell
+			
+			master_grid_ = new costmap_2d::Costmap2D(cell_x,cell_y,costmap_res,-1.0,-3.0,0);
+			n = &n_;
+    			
+    			global_frame = "laser";
+			topic_name = "/global_costmap";
+			
+			master_grid_ros = new costmap_2d::Costmap2DPublisher(n,master_grid_,global_frame,topic_name,false);
+		//costmap end
+		
+		
 		
 		bool first_loop = true;
 		bool transform_present = true; 
@@ -1176,9 +1111,12 @@ class ObstacleDetectorClass
 
 		Matrix4f transform_1 = Matrix4f::Identity();
 		int count = 0;
-		fill_costmap_test();
+		
+		//Vitual obstacle only for test
+		//fill_costmap_test(); 
 		
 		
+		ros::Duration(0.4).sleep();
 		
 		while(ros::ok())
 		{
@@ -1230,6 +1168,7 @@ class ObstacleDetectorClass
   				transform_1 (2,3) = 0.0;
   				transform_1 = transform_1;
   				pcl::transformPointCloud (cost_map_cloud, cost_map_cloud, transform_1);
+  			//ROS_INFO("cloud_to_costmap");
   				cloud_to_costmap(cost_map_cloud);
 			}
 						
@@ -1248,10 +1187,10 @@ class ObstacleDetectorClass
     			costmap_cl.header.stamp = ros::Time::now();		
 			cost_map_cl_pub_.publish(costmap_cl);			
 			
-			if (count < 40)
+			/*if (count < 40)
 			   	count++;
 			else
-				testCallBack();
+				testCallBack();*/
 				
 			//Publish trace path
 			sensor_msgs::PointCloud2 path_trace; 
@@ -1276,7 +1215,7 @@ class ObstacleDetectorClass
 		 
 		// Subscribers
 		ros::Subscriber SubFromCloud_;
-		ros::Subscriber subFromJoystick_;
+		
 		ros::Subscriber subFromTrackSpeed_;
 		ros::Subscriber subFromGoal_;
 		// Publishers
@@ -1305,7 +1244,7 @@ class ObstacleDetectorClass
 		double costmap_x_size;
 		double costmap_y_size;
 		double costmap_res;
-		pcl::PointCloud<pcl::PointXYZ> cost_map_cloud;
+		pcl::PointCloud<pcl::PointXYZI> cost_map_cloud;
 		unsigned int cell_x;
 		unsigned int cell_y;
 				
