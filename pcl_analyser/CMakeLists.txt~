@@ -134,10 +134,7 @@ add_library(RoverPath
 
 ## Declare a C++ executable
  add_executable(pcl_analyser_node src/pcl_analyser_node.cpp)
- add_executable(path_follower src/path_follower.cpp)
- add_executable(fake_obs_publisher src/fake_obs_publisher.cpp)
- 
- 
+
 ## Add cmake target dependencies of the executable
 ## same as for the library above
  add_dependencies(pcl_analyser_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
@@ -146,14 +143,7 @@ add_library(RoverPath
  target_link_libraries(pcl_analyser_node RoverPath
    ${catkin_LIBRARIES}
  )
- 
- target_link_libraries(path_follower
-   ${catkin_LIBRARIES}
- )
- 
- target_link_libraries(fake_obs_publisher
-   ${catkin_LIBRARIES}
- )
+
 #############
 ## Install ##
 #############

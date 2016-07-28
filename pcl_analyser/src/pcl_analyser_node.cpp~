@@ -851,8 +851,8 @@ class ObstacleDetectorClass
 
 	// Init particle End
 	       
-	if(demo_) ROS_INFO("Initial particle");
-	if(demo_) std::cout << x << "\n";
+	ROS_INFO("Initial particle");
+	std::cout << x << "\n";
 
 	        
 	solution_found = false;
@@ -906,8 +906,8 @@ class ObstacleDetectorClass
 				V_in(jj)     = x(row_it,i);
 				Omega_in(jj) = x(row_it+1,i);
 			}
-			if(demo_) ROS_INFO_STREAM_ONCE("V_in  "  <<  V_in);
-			if(demo_) ROS_INFO_STREAM_ONCE("Omega_in   "  <<  Omega_in);
+			ROS_INFO_STREAM_ONCE("V_in  "  <<  V_in);
+			ROS_INFO_STREAM_ONCE("Omega_in   "  <<  Omega_in);
 			/*
 			for(size_t jj=0;jj < V_in.size() ; jj++)
 			{
@@ -931,13 +931,13 @@ class ObstacleDetectorClass
 			tra_tail(0) = tra(0,tra.cols()-1);
 			tra_tail(1) = tra(1,tra.cols()-1);
 			tra_tail(2) = 0;
-		if(demo_) ROS_WARN_STREAM_ONCE("tra length  " << tra.cols() << "   tra_tail :  " << tra_tail);
+		ROS_WARN_STREAM_ONCE("tra length  " << tra.cols() << "   tra_tail :  " << tra_tail);
 			
 			
 			//Calculating the cost of trajectory
 			PATH_COST cost = Cost_of_path(tra, master_grid_);
 			
-		if(demo_) ROS_INFO_ONCE("cost of the path is %f",cost.Lethal_cost);
+		ROS_INFO_ONCE("cost of the path is %f",cost.Lethal_cost);
 			
 			float prop_speed = fabs(x(0,i));
 			
@@ -948,9 +948,9 @@ class ObstacleDetectorClass
 			
 			float Ob_func = Goal_gain *Ob_func_1 + Cost_gain *Ob_func_2 + Speed_gain * Ob_func_3;
 				      
-		if(demo_) ROS_ERROR("goal distance: %f, path cost: %f, speed different:%f",Ob_func_1,Ob_func_2,Ob_func_3);
-		if(demo_) ROS_INFO("LETHAL COST: %f",cost.Lethal_cost);		      
-		if(demo_) ROS_INFO("Ob_fun: %f",Ob_func);
+		ROS_ERROR("goal distance: %f, path cost: %f, speed different:%f",Ob_func_1,Ob_func_2,Ob_func_3);
+		ROS_INFO("LETHAL COST: %f",cost.Lethal_cost);		      
+		ROS_INFO("Ob_fun: %f",Ob_func);
 				      
 			if (Ob_func < x_best_cost)
 			{
