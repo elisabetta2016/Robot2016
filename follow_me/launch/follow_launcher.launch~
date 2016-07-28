@@ -1,8 +1,0 @@
-<launch>
-    <node pkg="openni_tracker" name="tracker" type="openni_tracker" output="screen">
-  </node>
-     <node pkg="robot_setup_tf" name="tf_broadcaster" type="tf_broadcaster" output="screen">
-  </node>
-  <node pkg="follow_me" name="follower" type="follow" output="screen">
-  </node>
-</launch>

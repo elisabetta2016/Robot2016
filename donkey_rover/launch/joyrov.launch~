@@ -1,7 +1,0 @@
-<launch>
-  <master auto="start"/>
-  <node pkg="joy" name="joy_node" type="joy_node" output="screen">
-  </node>
-  <node pkg="donkey_rover" name="rover_joy" type="rover_joy" output="screen">
-  </node>
-</launch>

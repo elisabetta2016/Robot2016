@@ -1,6 +1,0 @@
-<launch>
-  <master auto="start"/>
-  
-  <include file="$(find donkey_rover)/launch/rovmap.launch" />
-  <!--include file="$(find donkey_rover)/launch/gmap.launch" /--
-</launch> 
